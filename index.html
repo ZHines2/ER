@@ -93,8 +93,34 @@
     .screen-shake {
       animation: screenShake 0.4s ease-out;
     }
+    /* Help tooltip system */
+    .tooltip {
+      position: relative;
+      cursor: help;
+    }
+    .tooltip:hover::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--panel);
+      border: 1px solid var(--border);
+      padding: 8px;
+      border-radius: 4px;
+      white-space: pre-wrap;
+      max-width: 300px;
+      font-size: 11px;
+      z-index: 1000;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
     
-    /* Progress Modal Styles */
+    /* Genesis reset styling */
+    .genesis-active {
+      background: linear-gradient(45deg, #2a1a4a, #4a2a1a) !important;
+      border-color: #fa4 !important;
+    }
+    
     .progress-modal {
       position: fixed;
       top: 0;
@@ -196,12 +222,14 @@
           <span id="antimatterRow" style="display:none">antimatter: <span id="antimatterDisplay">0</span><span id="antimatterRate" style="color:#fa4;font-size:10px"></span></span>
         </div>
         <div style="margin-top:8px;">
-          <button onclick="openProgressModal()" style="font-size:12px;padding:4px 8px;">view progress</button>
-          <button onclick="fullReset()" style="font-size:12px;padding:4px 8px;margin-left:8px;color:#f44;border-color:#f44;" title="Complete game reset">reset game</button>
+          <button onclick="openProgressModal()" style="font-size:12px;padding:4px 8px;" class="tooltip" data-tooltip="View detailed progression tracking and unlock requirements">view progress</button>
+          <button onclick="fullReset()" style="font-size:12px;padding:4px 8px;margin-left:8px;color:#f44;border-color:#f44;" title="Complete game reset" class="tooltip" data-tooltip="Reset everything to start over completely">reset game</button>
+          <button onclick="DebugSystem.performGenesisReset()" style="font-size:12px;padding:4px 8px;margin-left:8px;color:#fa4;border-color:#fa4;" class="tooltip" data-tooltip="Ultimate reset: Lose everything but gain permanent speed and resource bonuses based on prestige level">genesis reset</button>
         </div>
         <div id="prestigeInfo" class="mono" style="display:none;margin-top:8px;color:#f4a">
           prestige lvl: <span id="prestigeLevel">0</span> | points: <span id="prestigePoints">0</span>
           <div style="margin-top:4px;font-size:10px" id="prestigeProgress"></div>
+          <div style="margin-top:4px;font-size:10px;color:#fa4;" id="genesisStatus"></div>
         </div>
         <pre id="tests"></pre>
       </div>
@@ -232,6 +260,18 @@
       <div class="section crt" id="metaSection" style="display:none">
         <h2>// meta-upgrades</h2>
         <div id="metaUpgrades" class="mono"></div>
+      </div>
+      <div class="section crt" id="debugPanel" style="display:none">
+        <h2>// debug console</h2>
+        <div style="font-size:10px;color:#9aa0a6;margin-bottom:8px;">Press Ctrl+Shift+D or enter Konami code to enable</div>
+        <div class="mono" style="font-size:10px;">
+          <button onclick="debug.addResource('pixels', 1000)" style="margin:2px;padding:2px 4px;font-size:10px;">+1k pixels</button>
+          <button onclick="debug.addResource('science', 100)" style="margin:2px;padding:2px 4px;font-size:10px;">+100 science</button>
+          <button onclick="debug.addBalls(5)" style="margin:2px;padding:2px 4px;font-size:10px;">+5 balls</button>
+          <button onclick="debug.skipToEndgame()" style="margin:2px;padding:2px 4px;font-size:10px;color:#fa4;">end-game</button>
+          <button onclick="debug.testPhysics()" style="margin:2px;padding:2px 4px;font-size:10px;">test physics</button>
+          <button onclick="debug.unlockAll()" style="margin:2px;padding:2px 4px;font-size:10px;color:#4af;">unlock all</button>
+        </div>
       </div>
     </div>
   </div>
@@ -362,27 +402,27 @@
       visible:()=>state.prestige.level>=2 && state.stats.wallHits>=10000 }
   };
 
-  // Research: one-time unlocks that provide permanent improvements or unlock new features
+  // Research: unlocks that provide permanent improvements or unlock new features
   const Research = {
     // Basic research for early improvements
-    physics: { name:'physics', cost:{science:120}, run(){ state.balls.forEach(b=>{b.vx*=1.07; b.vy*=1.07;}); delete Research.physics; buildResearch(); } },
-    cache:   { name:'cache',   cost:{science:250}, run(){ savePeriod=2500; setupSaveInterval(); delete Research.cache; buildResearch(); } },
-    ballPhysics: { name:'collision-bonus', cost:{science:500}, run(){ state.mul.collisionBonus=2; delete Research.ballPhysics; buildResearch(); } },
+    physics: { name:'physics', cost:{science:120}, toggleable:true, active:false, effect(){if(this.active) state.balls.forEach(b=>{b.vx*=1.07; b.vy*=1.07;});}, run(){ this.active=!this.active; this.effect(); if(!this.toggleable) delete Research.physics; buildResearch(); } },
+    cache:   { name:'cache',   cost:{science:250}, toggleable:false, run(){ savePeriod=2500; setupSaveInterval(); delete Research.cache; buildResearch(); } },
+    ballPhysics: { name:'collision-bonus', cost:{science:500}, toggleable:true, active:false, run(){ this.active=!this.active; if(!this.toggleable) delete Research.ballPhysics; buildResearch(); } },
     
     // Intermediate research - unlock with moderate progress requirements
-    momentum: { name:'momentum-theory', cost:{science:300}, run(){ state.mul.momentum=1.2; delete Research.momentum; buildResearch(); }, visible:()=>state.stats.totalScience>=150 },
-    harmonics: { name:'wave-harmonics', cost:{science:450,energy:1000}, run(){ state.mul.harmonics=1.25; delete Research.harmonics; buildResearch(); }, visible:()=>state.stats.totalScience>=300 },
-    fieldTheory: { name:'field-theory', cost:{science:600,pixels:2000}, run(){ state.mul.fieldTheory=1.3; delete Research.fieldTheory; buildResearch(); }, visible:()=>state.stats.totalScience>=400 },
-    entanglement: { name:'entanglement-prep', cost:{science:800,energy:2000}, run(){ state.mul.entanglement=1.15; delete Research.entanglement; buildResearch(); }, visible:()=>state.stats.totalScience>=600 },
+    momentum: { name:'momentum-theory', cost:{science:300}, toggleable:true, active:false, run(){ this.active=!this.active; if(!this.toggleable) delete Research.momentum; buildResearch(); }, visible:()=>state.stats.totalScience>=150 },
+    harmonics: { name:'wave-harmonics', cost:{science:450,energy:1000}, toggleable:true, active:false, run(){ this.active=!this.active; if(!this.toggleable) delete Research.harmonics; buildResearch(); }, visible:()=>state.stats.totalScience>=300 },
+    fieldTheory: { name:'field-theory', cost:{science:600,pixels:2000}, toggleable:true, active:false, run(){ this.active=!this.active; if(!this.toggleable) delete Research.fieldTheory; buildResearch(); }, visible:()=>state.stats.totalScience>=400 },
+    entanglement: { name:'entanglement-prep', cost:{science:800,energy:2000}, toggleable:true, active:false, run(){ this.active=!this.active; if(!this.toggleable) delete Research.entanglement; buildResearch(); }, visible:()=>state.stats.totalScience>=600 },
     
     // Advanced research - require prestige level and significant resources
-    quantumTheory: { name:'quantum-theory', cost:{science:1500,energy:3000}, run(){ state.mul.quantum=2; delete Research.quantumTheory; buildResearch(); }, visible:()=>state.stats.totalScience>=1000&&state.prestige.level>=1 },
-    timeAccel: { name:'time-acceleration', cost:{antimatter:1,quantum:10}, run(){ state.mul.timeScale=1.5; delete Research.timeAccel; buildResearch(); }, visible:()=>state.prestige.level>=2 },
-    prestigeUnlock: { name:'enable-prestige', cost:{science:2000,energy:5000}, run(){ state.prestige.unlocked=true; delete Research.prestigeUnlock; buildResearch(); updatePrestige(); }, visible:()=>!state.prestige.unlocked&&state.stats.totalPixels>=100000&&state.stats.totalScience>=800 },
+    quantumTheory: { name:'quantum-theory', cost:{science:1500,energy:3000}, toggleable:false, run(){ state.mul.quantum=2; delete Research.quantumTheory; buildResearch(); }, visible:()=>state.stats.totalScience>=1000&&state.prestige.level>=1 },
+    timeAccel: { name:'time-acceleration', cost:{antimatter:1,quantum:10}, toggleable:false, run(){ state.mul.timeScale=1.5; delete Research.timeAccel; buildResearch(); }, visible:()=>state.prestige.level>=2 },
+    prestigeUnlock: { name:'enable-prestige', cost:{science:2000,energy:5000}, toggleable:false, run(){ state.prestige.unlocked=true; delete Research.prestigeUnlock; buildResearch(); updatePrestige(); }, visible:()=>!state.prestige.unlocked&&state.stats.totalPixels>=100000&&state.stats.totalScience>=800 },
     
     // Ball vitality research
-    vitalityTheory: { name:'vitality theory', cost:{science:350,energy:1000}, run(){ state.balls.forEach(b => { b.maxVitality = 1.2; if(b.vitality > 1.0) b.vitality = Math.min(b.maxVitality, b.vitality); }); delete Research.vitalityTheory; buildResearch(); }, visible:()=>state.stats.wallHits>=1200 },
-    decayNullification: { name:'decay nullification', cost:{quantum:15,antimatter:1}, run(){ state.decay.decayEnabled = false; delete Research.decayNullification; buildResearch(); }, visible:()=>state.prestige.level>=2 && state.stats.wallHits>=5000 }
+    vitalityTheory: { name:'vitality theory', cost:{science:350,energy:1000}, toggleable:false, run(){ state.balls.forEach(b => { b.maxVitality = 1.2; if(b.vitality > 1.0) b.vitality = Math.min(b.maxVitality, b.vitality); }); delete Research.vitalityTheory; buildResearch(); }, visible:()=>state.stats.wallHits>=1200 },
+    decayNullification: { name:'decay nullification', cost:{quantum:15,antimatter:1}, toggleable:false, run(){ state.decay.decayEnabled = false; delete Research.decayNullification; buildResearch(); }, visible:()=>state.prestige.level>=2 && state.stats.wallHits>=5000 }
   };
 
   const Milestones = {
@@ -510,22 +550,50 @@
     // Apply starting resource bonus
     const startBonus = MetaUpgrades.startingResources.effect(MetaUpgrades.startingResources.level);
     
-    // Reset progress but keep some things
-    const keepBalls = Math.floor(state.balls.length / 3);
-    state.resources = {
-      pixels:startBonus,
-      energy:startBonus * 0.5,
-      science:0,
-      quantum:state.resources.quantum||0,
-      antimatter:state.resources.antimatter||0
-    };
-    state.balls = state.balls.slice(0, keepBalls);
-    for(const bld of Object.values(Buildings)) bld.n = 0;
+    // Reset progress but keep some things (improved balance)
+    const keepBalls = Math.max(1, Math.floor(state.balls.length / 4)); // Keep fewer balls but at least 1
+    const keepQuantum = state.resources.quantum * 0.8; // Keep 80% of quantum
+    const keepAntimatter = state.resources.antimatter * 0.9; // Keep 90% of antimatter
     
-    // Reset building costs
+    state.resources = {
+      pixels: startBonus,
+      energy: startBonus * 0.5,
+      science: 0,
+      quantum: keepQuantum,
+      antimatter: keepAntimatter
+    };
+    
+    // Keep best balls and apply prestige speed bonus
+    state.balls.sort((a, b) => (BallTypes[b.type].r || 1) - (BallTypes[a.type].r || 1));
+    state.balls = state.balls.slice(0, keepBalls);
+    const speedBonus = MetaUpgrades.persistentSpeed.effect(MetaUpgrades.persistentSpeed.level);
+    for(const ball of state.balls) {
+      ball.vx *= speedBonus;
+      ball.vy *= speedBonus;
+      ball.vitality = Math.min(ball.maxVitality, ball.vitality + 0.2); // Slight vitality boost
+    }
+    
+    // Keep purchased research but reset toggles
+    for(const r of Object.values(Research)) {
+      if(r.toggleable) r.active = false;
+    }
+    
+    // Reset buildings but keep a percentage of higher tier ones
+    for(const [key, bld] of Object.entries(Buildings)) {
+      if(bld.tier >= 3) {
+        bld.n = Math.floor(bld.n * 0.1); // Keep 10% of tier 3+ buildings
+      } else {
+        bld.n = 0;
+      }
+    }
+    
+    // Reset building costs to base values
     Buildings.pgen.cost = {energy:25};
     Buildings.ecap.cost = {pixels:35}; 
     Buildings.lab.cost = {pixels:80,energy:40};
+    
+    // Show prestige summary
+    alert(`Prestige Complete! Level: ${state.prestige.level}, Points gained: ${points}\nKept: ${keepBalls} balls, ${keepQuantum.toFixed(1)} quantum, ${keepAntimatter.toFixed(1)} antimatter`);
     
     refresh(true);
   }
@@ -644,32 +712,118 @@
   function line(label,id){ const b=document.createElement('button'); b.id=id; b.textContent=label; return b; }
 
   function buildUpgrades(){ const root=document.getElementById('upgrades'); root.innerHTML='';
+    const upgradeTooltips = {
+      speed: "Increase ball velocity by 15%. Balls move faster = more wall collisions = more resources.",
+      extra: "Spawn a new ball. More balls = more collisions = more resources.",
+      pMult: "Double pixel generation from all sources. Essential for early game progression.",
+      eMult: "Double energy generation from all sources. Energy powers advanced buildings.",
+      ballGrip: "Balls grip walls better, improving resource generation by 20%.",
+      efficiency: "General efficiency boost (15%) affecting multiple game systems.",
+      resonance: "Harmonic resonance increases resource generation by 25%.",
+      catalyst: "Catalytic reactions boost resource generation by 30%.",
+      harmonic: "Harmonic synchronization provides 40% boost to all systems.",
+      sBall: "Unlock energy balls: slower but generate 3x energy + quantum particles.",
+      qBall: "Unlock quantum balls: fast, agile, generate quantum and 2x pixels.",
+      autoClick: "Automatically perform manual clicking actions.",
+      autoBuy: "Automatically purchase buildings when affordable.",
+      vitalBoost: "Restore 0.2 vitality to all balls. Healthy balls are more effective.",
+      decayResistance: "Reduce global decay rate by 25%. Balls last longer.",
+      collisionRecovery: "Balls recover +0.02 vitality per collision.",
+      decayMonitor: "Show detailed decay status for all balls."
+    };
+    
     for(const [k,u] of Object.entries(Upgrades)){
       if(u.visible && !u.visible()) continue;
       const b=line(`${u.name}  [${costStr(u.cost)}]`,`u_${k}`);
       b.onclick=()=>{ if(can(u.cost)){ pay(u.cost); u.run(); refresh(true); } };
-      // Set disabled property for accessibility
       b.disabled = !can(u.cost);
+      if(upgradeTooltips[k]) {
+        b.className += ' tooltip';
+        b.setAttribute('data-tooltip', upgradeTooltips[k]);
+      }
       root.appendChild(b);
     }
   }
   function buildBuildings(){ const root=document.getElementById('buildings'); root.innerHTML='';
+    const buildingTooltips = {
+      pgen: "Generates 0.15 pixels/sec. Basic passive income source.",
+      ecap: "Generates 0.10 energy/sec. Essential for powering advanced systems.",
+      lab: "Generates 0.05 science/sec. Unlocks research and advanced features.",
+      amplifier: "Dual-purpose: generates pixels (0.25/sec) and energy (0.05/sec).",
+      conduit: "Energy conduit: generates 0.20 energy/sec and 0.02 science/sec.",
+      synthesizer: "Multi-resource synthesizer: pixels, energy, and science generation.",
+      resonator: "Science focused: 0.12 science/sec and 0.08 pixels/sec.",
+      quantumGen: "Generates 0.02 quantum/sec. Quantum unlocks end-game content.",
+      antimatterGen: "Generates 0.01 antimatter/sec. Ultimate end-game resource.",
+      megaLab: "Advanced laboratory: generates 2 science/sec.",
+      autoFactory: "Automated factory: generates 10 pixels/sec and 5 energy/sec.",
+      vitalityStation: "Reduces global decay rate by 10% per building. Keeps balls healthy.",
+      rejuvenator: "Each building adds +0.01 vitality recovery per collision.",
+      eternityCore: "If owned, completely disables decay system. Ultimate preservation."
+    };
+    
     for(const [k,bld] of Object.entries(Buildings)){
       if(bld.visible && !bld.visible()) continue;
       const b=line(`${bld.name} x${bld.n}  [${costStr(bld.cost)}]`,`b_${k}`);
       b.onclick=()=>{ if(can(bld.cost)){ pay(bld.cost); bld.n++; updateBuildingCost(k); refresh(true); } };
-      // Set disabled property for accessibility
       b.disabled = !can(bld.cost);
+      if(buildingTooltips[k]) {
+        b.className += ' tooltip';
+        b.setAttribute('data-tooltip', buildingTooltips[k]);
+      }
       root.appendChild(b);
     }
   }
   function buildResearch(){ const root=document.getElementById('research'); root.innerHTML='';
+    const researchTooltips = {
+      physics: "TOGGLEABLE: Increase ball velocity by 7% when active. Faster balls = more collisions.",
+      cache: "Improve save frequency to 2.5s. Reduces progress loss on crashes.",
+      ballPhysics: "TOGGLEABLE: 2x collision bonus when active. Doubles resource generation from collisions.",
+      momentum: "TOGGLEABLE: 20% momentum theory bonus when active. Affects momentum-based calculations.",
+      harmonics: "TOGGLEABLE: 25% wave harmonics bonus when active. Harmonic resonance effects.",
+      fieldTheory: "TOGGLEABLE: 30% field theory bonus when active. Advanced physics manipulation.",
+      entanglement: "TOGGLEABLE: 15% entanglement bonus when active. Quantum preparation effects.",
+      quantumTheory: "Unlocks quantum mechanics. 2x quantum generation from all sources.",
+      timeAccel: "Time acceleration: 1.5x time scale for passive generation.",
+      prestigeUnlock: "Unlocks the prestige system for meta-progression.",
+      vitalityTheory: "Increase maximum ball vitality to 1.2. Healthier balls are more effective.",
+      decayNullification: "Completely disable the decay system. Balls never lose vitality."
+    };
+    
     for(const [k,r] of Object.entries(Research)){
       if(r.visible && !r.visible()) continue;
-      const b=line(`${r.name}  [${costStr(r.cost)}]`,`r_${k}`);
-      b.onclick=()=>{ if(can(r.cost)){ pay(r.cost); r.run(); refresh(true); } };
-      // Set disabled property for accessibility
-      b.disabled = !can(r.cost);
+      let buttonText = r.name;
+      
+      if(r.purchased && r.toggleable) {
+        buttonText += r.active ? ' [ON]' : ' [OFF]';
+      } else if(!r.purchased) {
+        buttonText += `  [${costStr(r.cost)}]`;
+      }
+      
+      const b=line(buttonText,`r_${k}`);
+      b.onclick=()=>{ 
+        if(!r.purchased && can(r.cost)){ 
+          pay(r.cost); 
+          r.purchased = true;
+          if(r.toggleable) r.active = false; // Start toggleable research as OFF
+        }
+        if(r.purchased && r.toggleable) {
+          r.run(); // Toggle the research
+          refresh(true); 
+        } else if(r.purchased && !r.toggleable) {
+          r.run(); // Run one-time research
+          refresh(true);
+        }
+      };
+      b.disabled = !r.purchased && !can(r.cost);
+      if(r.toggleable && r.active && r.purchased) {
+        b.style.background = '#2a4a2a';
+        b.style.borderColor = '#4f4';
+      }
+      if(researchTooltips[k]) {
+        b.className += ' tooltip';
+        b.setAttribute('data-tooltip', researchTooltips[k]);
+      }
       root.appendChild(b);
     }
   }
@@ -803,6 +957,16 @@
       const threshold = Math.max(100000, 50000);
       const progressPercent = Math.min(100, (currentProgress / threshold) * 100);
       document.getElementById('prestigeProgress').textContent = `Next: ${nextPrestigePoints} pts (${progressPercent.toFixed(1)}% ready)`;
+      
+      // Show genesis status
+      const genesisEl = document.getElementById('genesisStatus');
+      if(state.prestige.genesis) {
+        genesisEl.textContent = `GENESIS: ${(state.mul.genesisSpeed||1).toFixed(1)}x speed, ${(state.mul.genesisResource||1).toFixed(1)}x resources`;
+        genesisEl.parentElement.classList.add('genesis-active');
+      } else {
+        genesisEl.textContent = '';
+        genesisEl.parentElement.classList.remove('genesis-active');
+      }
     }
     
     if(rebuild){ buildUpgrades(); buildBuildings(); buildResearch(); buildPrestige(); buildMilestones(); buildChallenges(); buildMetaUpgrades(); }
@@ -1055,12 +1219,16 @@
           b.vitality = Math.min(b.maxVitality, b.vitality + recoveryRate);
         }
         
-        const collisionBonus = state.mul.collisionBonus || 1;
+        const collisionBonus = (Research.ballPhysics && Research.ballPhysics.active ? 2 : 1);
         const vitalityMultiplier = b.vitality; // Ball effectiveness based on vitality
         const totalResourceMult = resourceMult * collisionBonus * vitalityMultiplier *
           (state.mul.ballGrip || 1) * (state.mul.efficiency || 1) * (state.mul.resonance || 1) * 
-          (state.mul.catalyst || 1) * (state.mul.harmonic || 1) * (state.mul.momentum || 1) * 
-          (state.mul.harmonics || 1) * (state.mul.fieldTheory || 1) * (state.mul.entanglement || 1);
+          (state.mul.catalyst || 1) * (state.mul.harmonic || 1) * 
+          (Research.momentum && Research.momentum.active ? 1.2 : 1) * 
+          (Research.harmonics && Research.harmonics.active ? 1.25 : 1) * 
+          (Research.fieldTheory && Research.fieldTheory.active ? 1.3 : 1) * 
+          (Research.entanglement && Research.entanglement.active ? 1.15 : 1) *
+          (state.mul.genesisResource || 1); // Apply genesis resource bonus
         
         // Trigger collision effect
         triggerCollisionEffect();
@@ -1110,14 +1278,20 @@
           const nx = dx / distance;
           const ny = dy / distance;
           
-          // Separate balls to prevent overlap
+          // Separate balls to prevent overlap - more aggressive separation
           const overlap = minDistance - distance;
-          const separateX = nx * overlap * 0.5;
-          const separateY = ny * overlap * 0.5;
+          const separateX = nx * overlap * 0.6; // Increased from 0.5
+          const separateY = ny * overlap * 0.6;
           b1.x -= separateX;
           b1.y -= separateY;
           b2.x += separateX;
           b2.y += separateY;
+          
+          // Keep balls within bounds after separation
+          b1.x = Math.max(b1.r, Math.min(cssW - b1.r, b1.x));
+          b1.y = Math.max(b1.r, Math.min(cssH - b1.r, b1.y));
+          b2.x = Math.max(b2.r, Math.min(cssW - b2.r, b2.x));
+          b2.y = Math.max(b2.r, Math.min(cssH - b2.r, b2.y));
           
           // Get ball masses and restitution
           const m1 = b1.mass || 1.0;
@@ -1144,6 +1318,18 @@
           b1.vy += impulse1 * ny;
           b2.vx -= impulse2 * nx;
           b2.vy -= impulse2 * ny;
+          
+          // Apply additional tangential friction to make collisions feel more realistic
+          const tangentX = -ny;
+          const tangentY = nx;
+          const dvt = dvx * tangentX + dvy * tangentY;
+          const frictionCoeff = 0.1; // Small friction coefficient
+          const frictionImpulse = frictionCoeff * impulse / (1/m1 + 1/m2);
+          
+          b1.vx += (frictionImpulse / m1) * tangentX * Math.sign(dvt);
+          b1.vy += (frictionImpulse / m1) * tangentY * Math.sign(dvt);
+          b2.vx -= (frictionImpulse / m2) * tangentX * Math.sign(dvt);
+          b2.vy -= (frictionImpulse / m2) * tangentY * Math.sign(dvt);
           
           // Calculate collision energy for gameplay effects
           const collisionEnergy = 0.5 * (m1 * (b1.vx*b1.vx + b1.vy*b1.vy) + m2 * (b2.vx*b2.vx + b2.vy*b2.vy));
@@ -1401,7 +1587,10 @@
         lastSave:state.lastSave,
         metaUpgrades:Object.fromEntries(Object.entries(MetaUpgrades).map(([k,v])=>[k,{level:v.level}])),
         // New decay system data
-        decay:state.decay
+        decay:state.decay,
+        // Research purchase states
+        researchPurchased:Object.fromEntries(Object.entries(Research).map(([k,v])=>[k,!!v.purchased])),
+        researchActive:Object.fromEntries(Object.entries(Research).filter(([k,v])=>v.toggleable).map(([k,v])=>[k,!!v.active]))
       };
       localStorage.setItem('tty_idle_save', JSON.stringify(saveData));
     }catch(e){
@@ -1447,6 +1636,22 @@
       if(d.automation && typeof d.automation === 'object') Object.assign(state.automation,d.automation);
       if(d.ballTypes && Array.isArray(d.ballTypes)) {
         state.ballTypes = d.ballTypes.filter(type => BallTypes[type]); // Only valid ball types
+      }
+      
+      // Restore research purchase states
+      if(d.researchPurchased && typeof d.researchPurchased === 'object') {
+        for(const [k,purchased] of Object.entries(d.researchPurchased)) {
+          if(Research[k] && typeof purchased === 'boolean') {
+            Research[k].purchased = purchased;
+          }
+        }
+      }
+      if(d.researchActive && typeof d.researchActive === 'object') {
+        for(const [k,active] of Object.entries(d.researchActive)) {
+          if(Research[k] && Research[k].toggleable && typeof active === 'boolean') {
+            Research[k].active = active;
+          }
+        }
       }
       if(d.stats && typeof d.stats === 'object') {
         for(const [k,v] of Object.entries(d.stats)) {
@@ -1586,6 +1791,97 @@
     document.getElementById('tests').textContent = out.join('\n');
     console.log(out.join('\n'));
   }
+
+  // Debug system for deep game state access
+  const DebugSystem = {
+    enabled: false,
+    commands: {
+      help: () => console.log("Debug commands: addResource(type, amount), setPrestige(level), addBalls(count, type), unlockAll(), skipToEndgame(), testPhysics(), toggleDecay(), showState()"),
+      addResource: (type, amount) => { state.resources[type] = (state.resources[type] || 0) + amount; refresh(); },
+      setPrestige: (level) => { state.prestige.level = level; state.prestige.points = level * 10; updatePrestige(); refresh(); },
+      addBalls: (count = 10, type = 'basic') => { for(let i = 0; i < count; i++) state.balls.push(createBall(type)); },
+      unlockAll: () => { 
+        state.ballTypes = ['basic', 'energy', 'quantum', 'antimatter'];
+        for(const r of Object.values(Research)) if(r.cost) { r.purchased = true; }
+        buildResearch(); refresh(); 
+      },
+      skipToEndgame: () => {
+        state.resources = {pixels:1e6, energy:1e6, science:1e5, quantum:1e3, antimatter:100};
+        state.stats = {totalPixels:1e7, totalEnergy:1e7, totalScience:1e6, ballsSpawned:1000, wallHits:10000, ballsLost:100};
+        state.prestige = {level:5, points:50, unlocked:true, unlocks:{}};
+        DebugSystem.commands.unlockAll();
+        DebugSystem.commands.addBalls(20, 'quantum');
+        DebugSystem.commands.addBalls(10, 'antimatter');
+      },
+      testPhysics: () => {
+        // Add balls with different velocities to test collisions
+        state.balls = [];
+        state.balls.push({...createBall('basic'), x:200, y:200, vx:5, vy:0});
+        state.balls.push({...createBall('energy'), x:300, y:200, vx:-5, vy:0});
+        state.balls.push({...createBall('quantum'), x:250, y:150, vx:0, vy:5});
+      },
+      toggleDecay: () => { state.decay.decayEnabled = !state.decay.decayEnabled; console.log('Decay:', state.decay.decayEnabled); },
+      showState: () => console.log(JSON.stringify(state, null, 2)),
+      genesisReset: () => DebugSystem.performGenesisReset()
+    },
+    
+    enable: () => {
+      DebugSystem.enabled = true;
+      window.debug = DebugSystem.commands;
+      console.log("Debug mode enabled! Use debug.help() for commands.");
+      document.getElementById('debugPanel').style.display = 'block';
+    },
+    
+    performGenesisReset: () => {
+      if(!confirm('Genesis Reset: Keep prestige buffs but lose everything else? This is irreversible!')) return;
+      
+      // Calculate genesis bonuses based on current progress
+      const genesisBonus = {
+        speedMult: 1 + (state.prestige.level * 0.1),
+        resourceMult: 1 + (state.prestige.level * 0.05),
+        startBalls: Math.min(5, 1 + Math.floor(state.prestige.level / 2))
+      };
+      
+      // Complete reset except for genesis bonuses
+      localStorage.removeItem('tty_idle_save');
+      state.resources = {pixels:0,energy:0,science:0,quantum:0,antimatter:0};
+      state.balls = [];
+      for(let i = 0; i < genesisBonus.startBalls; i++) {
+        const ball = createBall();
+        ball.vx *= genesisBonus.speedMult;
+        ball.vy *= genesisBonus.speedMult;
+        state.balls.push(ball);
+      }
+      state.mul.genesisSpeed = genesisBonus.speedMult;
+      state.mul.genesisResource = genesisBonus.resourceMult;
+      state.stats = {totalPixels:0,totalEnergy:0,totalScience:0,ballsSpawned:genesisBonus.startBalls,wallHits:0,ballsLost:0};
+      state.prestige = {level:0,points:0,unlocks:{},genesis:true};
+      state.milestones = {};
+      state.decay = {globalDecayRate:1.0,vitalityRecoveryRate:0.0,decayEnabled:true,showDecayUI:false};
+      
+      // Reset research and buildings
+      for(const r of Object.values(Research)) { r.purchased = false; r.active = false; }
+      for(const bld of Object.values(Buildings)) bld.n = 0;
+      
+      alert(`Genesis Reset Complete! Bonuses: ${genesisBonus.speedMult.toFixed(1)}x speed, ${genesisBonus.resourceMult.toFixed(1)}x resources, ${genesisBonus.startBalls} starting balls`);
+      refresh(true);
+    }
+  };
+  
+  // Enable debug on Konami code or specific key combination
+  let debugKeySequence = [];
+  document.addEventListener('keydown', (e) => {
+    debugKeySequence.push(e.key);
+    if(debugKeySequence.length > 10) debugKeySequence.shift();
+    // Konami code: ↑↑↓↓←→←→ba
+    if(debugKeySequence.join('').includes('ArrowUpArrowUpArrowDownArrowDownArrowLeftArrowRightArrowLeftArrowRightba')) {
+      DebugSystem.enable();
+    }
+    // Quick debug: Ctrl+Shift+D
+    if(e.ctrlKey && e.shiftKey && e.key === 'D') {
+      DebugSystem.enable();
+    }
+  });
 
   // Full reset function for players
   function fullReset() {

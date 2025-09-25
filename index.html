@@ -38,12 +38,9 @@
       .wrap{padding:8px}
       .progress-modal-content{padding:16px;width:95%}
       .kv{flex-direction:column;gap:8px}
-      .debug-menu{max-width:240px;width:calc(100vw - 80px);left:20px;right:20px;padding:8px;max-height:60vh;overflow-y:auto;background:rgba(17, 17, 17, 0.92)}
     }
     /* Touch-friendly enhancements */
     @media (max-width:600px) {
-      .debug-toggle{bottom:20px;right:20px;font-size:14px;padding:8px 12px;opacity:0.7}
-      .debug-menu{max-width:260px;width:calc(100vw - 60px);padding:10px;max-height:70vh;overflow-y:auto;background:rgba(17, 17, 17, 0.95)}
       .progress-close{font-size:24px;padding:8px 12px}
       .milestone,.challenge,.meta-upgrade{padding:8px;margin:4px 0;font-size:12px}
     }
@@ -181,78 +178,6 @@
       padding: 4px;
     }
     
-    /* Debug Menu Styles */
-    .debug-menu {
-      position: fixed;
-      top: 10px;
-      right: 10px;
-      background: var(--panel);
-      border: 2px solid var(--border);
-      border-radius: 8px;
-      padding: 16px;
-      max-width: 300px;
-      z-index: 2000;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.3s ease;
-      box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
-    }
-    .debug-menu.active {
-      opacity: 1;
-      pointer-events: all;
-    }
-    .debug-menu h4 {
-      margin: 0 0 12px 0;
-      color: var(--accent);
-      font-size: 14px;
-    }
-    .debug-section {
-      margin: 12px 0;
-      padding: 8px;
-      background: rgba(255, 255, 255, 0.02);
-      border-radius: 4px;
-    }
-    .debug-section h5 {
-      margin: 0 0 8px 0;
-      color: var(--muted);
-      font-size: 12px;
-    }
-    .debug-input {
-      width: 60px;
-      background: var(--bg);
-      color: var(--ink);
-      border: 1px solid var(--border);
-      border-radius: 3px;
-      padding: 4px 6px;
-      font-size: 11px;
-      font-family: inherit;
-      margin-right: 4px;
-    }
-    .debug-button {
-      padding: 4px 8px !important;
-      font-size: 11px !important;
-      margin: 2px !important;
-      min-width: auto !important;
-    }
-    .debug-toggle {
-      position: fixed;
-      top: 10px;
-      right: 10px;
-      background: rgba(0, 0, 0, 0.6);
-      color: var(--muted);
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      padding: 6px 10px;
-      font-size: 12px;
-      cursor: pointer;
-      z-index: 2001;
-      font-family: inherit;
-      transition: all 0.2s ease;
-    }
-    .debug-toggle:hover {
-      background: rgba(0, 0, 0, 0.8);
-      color: var(--accent);
-    }
   </style>
 </head>
 <body>
@@ -317,62 +242,6 @@
       <button class="progress-close" onclick="closeProgressModal()">&times;</button>
       <h3>// progression tracker</h3>
       <div id="progressContent"></div>
-    </div>
-  </div>
-
-  <!-- Debug Menu -->
-  <button class="debug-toggle" onclick="toggleDebugMenu()">debug</button>
-  <div id="debugMenu" class="debug-menu">
-    <h4>// debug console</h4>
-    
-    <div class="debug-section">
-      <h5>Resources</h5>
-      <div>
-        <input type="number" id="debugPixels" class="debug-input" placeholder="0" />
-        <button class="debug-button" onclick="setResource('pixels')">pixels</button>
-        <input type="number" id="debugEnergy" class="debug-input" placeholder="0" />
-        <button class="debug-button" onclick="setResource('energy')">energy</button>
-      </div>
-      <div style="margin-top:4px;">
-        <input type="number" id="debugScience" class="debug-input" placeholder="0" />
-        <button class="debug-button" onclick="setResource('science')">science</button>
-        <input type="number" id="debugQuantum" class="debug-input" placeholder="0" />
-        <button class="debug-button" onclick="setResource('quantum')">quantum</button>
-      </div>
-    </div>
-    
-    <div class="debug-section">
-      <h5>Game State</h5>
-      <div>
-        <button class="debug-button" onclick="debugSpeedUp()">speed x10</button>
-        <button class="debug-button" onclick="debugAddBalls()">+5 balls</button>
-      </div>
-      <div style="margin-top:4px;">
-        <button class="debug-button" onclick="debugUnlockAll()">unlock all</button>
-        <button class="debug-button" onclick="debugResetGame()">reset</button>
-      </div>
-    </div>
-    
-    <div class="debug-section">
-      <h5>Prestige</h5>
-      <div>
-        <input type="number" id="debugPrestigeLevel" class="debug-input" placeholder="0" />
-        <button class="debug-button" onclick="setPrestigeLevel()">level</button>
-        <input type="number" id="debugPrestigePoints" class="debug-input" placeholder="0" />
-        <button class="debug-button" onclick="setPrestigePoints()">points</button>
-      </div>
-    </div>
-    
-    <div class="debug-section">
-      <h5>Quick States</h5>
-      <div>
-        <button class="debug-button" onclick="debugEarlyGame()">early game</button>
-        <button class="debug-button" onclick="debugMidGame()">mid game</button>
-      </div>
-      <div style="margin-top:4px;">
-        <button class="debug-button" onclick="debugLateGame()">late game</button>
-        <button class="debug-button" onclick="debugEndGame()">end game</button>
-      </div>
     </div>
   </div>
 
@@ -1718,64 +1587,7 @@
     console.log(out.join('\n'));
   }
 
-  // ---------- debug menu ----------
-  function toggleDebugMenu() {
-    const menu = document.getElementById('debugMenu');
-    menu.classList.toggle('active');
-  }
-  
-  function setResource(type) {
-    const input = document.getElementById('debug' + type.charAt(0).toUpperCase() + type.slice(1));
-    const value = parseFloat(input.value) || 0;
-    state.resources[type] = value;
-    refresh();
-    console.log(`Set ${type} to ${value}`);
-  }
-  
-  function debugSpeedUp() {
-    state.balls.forEach(b => {
-      b.vx *= 10;
-      b.vy *= 10;
-    });
-    console.log('Applied speed x10 to all balls');
-  }
-  
-  function debugAddBalls() {
-    for(let i = 0; i < 5; i++) {
-      state.balls.push(createBall());
-    }
-    console.log('Added 5 balls');
-  }
-  
-  function debugUnlockAll() {
-    // Unlock prestige
-    state.prestige.unlocked = true;
-    state.prestige.level = 3;
-    state.prestige.points = 100;
-    
-    // Unlock ball types
-    if(!state.ballTypes.includes('energy')) state.ballTypes.push('energy');
-    if(!state.ballTypes.includes('quantum')) state.ballTypes.push('quantum');
-    if(!state.ballTypes.includes('antimatter')) state.ballTypes.push('antimatter');
-    
-    // Set high stats to unlock everything
-    state.stats.totalPixels = 200000;
-    state.stats.totalEnergy = 100000;
-    state.stats.totalScience = 2000;
-    
-    updatePrestige();
-    refresh(true);
-    console.log('Unlocked all features');
-  }
-  
-  function debugResetGame() {
-    if(confirm('Reset game state?')) {
-      localStorage.removeItem('tty_idle_save');
-      location.reload();
-    }
-  }
-  
-  // Full reset function for players - more accessible
+  // Full reset function for players
   function fullReset() {
     if(confirm('This will completely reset your game progress. Are you sure?')) {
       localStorage.removeItem('tty_idle_save');
@@ -1788,61 +1600,6 @@
       state.decay = {globalDecayRate:1.0,vitalityRecoveryRate:0.0,decayEnabled:true,showDecayUI:false};
       location.reload();
     }
-  }
-  
-  function setPrestigeLevel() {
-    const input = document.getElementById('debugPrestigeLevel');
-    const value = parseInt(input.value) || 0;
-    state.prestige.level = value;
-    updatePrestige();
-    refresh(true);
-    console.log(`Set prestige level to ${value}`);
-  }
-  
-  function setPrestigePoints() {
-    const input = document.getElementById('debugPrestigePoints');
-    const value = parseInt(input.value) || 0;
-    state.prestige.points = value;
-    refresh();
-    console.log(`Set prestige points to ${value}`);
-  }
-  
-  function debugEarlyGame() {
-    state.resources = {pixels:500, energy:300, science:10, quantum:0, antimatter:0};
-    state.stats = {totalPixels:500, totalEnergy:300, totalScience:10, ballsSpawned:5, wallHits:50};
-    refresh();
-    console.log('Set early game state');
-  }
-  
-  function debugMidGame() {
-    state.resources = {pixels:5000, energy:3000, science:200, quantum:1, antimatter:0};
-    state.stats = {totalPixels:15000, totalEnergy:8000, totalScience:500, ballsSpawned:20, wallHits:500};
-    state.prestige.level = 1;
-    if(!state.ballTypes.includes('energy')) state.ballTypes.push('energy');
-    updatePrestige();
-    refresh(true);
-    console.log('Set mid game state');
-  }
-  
-  function debugLateGame() {
-    state.resources = {pixels:50000, energy:25000, science:1500, quantum:20, antimatter:2};
-    state.stats = {totalPixels:150000, totalEnergy:80000, totalScience:2000, ballsSpawned:50, wallHits:2000};
-    state.prestige = {level:2, points:50, unlocked:true, unlocks:{}};
-    if(!state.ballTypes.includes('energy')) state.ballTypes.push('energy');
-    if(!state.ballTypes.includes('quantum')) state.ballTypes.push('quantum');
-    updatePrestige();
-    refresh(true);
-    console.log('Set late game state');
-  }
-  
-  function debugEndGame() {
-    state.resources = {pixels:500000, energy:250000, science:10000, quantum:500, antimatter:100};
-    state.stats = {totalPixels:1000000, totalEnergy:500000, totalScience:15000, ballsSpawned:100, wallHits:10000};
-    state.prestige = {level:5, points:500, unlocked:true, unlocks:{}};
-    state.ballTypes = ['basic', 'energy', 'quantum', 'antimatter'];
-    updatePrestige();
-    refresh(true);
-    console.log('Set end game state');
   }
 
   // ---------- boot ----------

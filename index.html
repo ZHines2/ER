@@ -1403,22 +1403,126 @@
     html += '<h4>Feature Unlocks</h4>';
     
     const unlocks = [
-      {name: 'Intermediate Buildings', unlocked: state.stats.totalPixels>=1000, req: 'Pixels: 1,000', desc: 'Amplifier, Conduit, Synthesizer, Resonator'},
-      {name: 'Advanced Research', unlocked: state.stats.totalScience>=150, req: 'Science: 150', desc: 'Momentum, Harmonics, Field Theory'},
-      {name: 'Energy Ball', unlocked: state.ballTypes.includes('energy'), req: 'Science: 100, Energy: 5,000', desc: 'Energy-focused ball type'},
-      {name: 'Quantum Content', unlocked: state.stats.totalScience>=1000&&state.stats.totalPixels>=50000&&state.prestige.level>=1, req: 'Science: 1,000, Pixels: 50,000, Prestige: 1', desc: 'Quantum balls and buildings'},
-      {name: 'Prestige System', unlocked: state.prestige.unlocked, req: 'Science: 800, Pixels: 100,000', desc: 'Meta-progression system'},
-      {name: 'Genesis Reset', unlocked: state.prestige.level >= 3 && state.stats.wallHits >= 10000 && (state.resources.antimatter >= 5 || state.prestige.genesis), req: 'Prestige: 3, Wall Hits: 10,000, Antimatter: 5', desc: 'Ultimate reset with permanent bonuses'}
+      // Early Game Unlocks
+      {name: 'Intermediate Buildings', unlocked: state.stats.totalPixels>=1000, req: 'Pixels: 1,000', desc: 'Amplifier, Conduit, Synthesizer, Resonator', tier: 1},
+      {name: 'Advanced Research', unlocked: state.stats.totalScience>=150, req: 'Science: 150', desc: 'Momentum, Harmonics, Field Theory', tier: 1},
+      {name: 'Energy Ball', unlocked: state.ballTypes.includes('energy'), req: 'Science: 100, Energy: 5,000', desc: 'Energy-focused ball type', tier: 1},
+      {name: 'Quantum Content', unlocked: state.stats.totalScience>=1000&&state.stats.totalPixels>=50000&&state.prestige.level>=1, req: 'Science: 1,000, Pixels: 50,000, Prestige: 1', desc: 'Quantum balls and buildings', tier: 2},
+      {name: 'Prestige System', unlocked: state.prestige.unlocked, req: 'Science: 800, Pixels: 100,000', desc: 'Meta-progression system', tier: 2},
+      
+      // Cosmic Ball Unlocks
+      {name: '🌌 Cosmic Ball', unlocked: state.ballTypes.includes('cosmic'), req: 'Prestige: 5, Cosmic Energy: 50', desc: 'Gravitational pull effects, enables homing attacks', tier: 3},
+      {name: '💡 Photon Ball', unlocked: state.ballTypes.includes('photon'), req: 'Light Years: 5, Cosmic Collisions: 1,000', desc: 'Light-speed movement, light burst attacks', tier: 3},
+      {name: '🖤 Dark Matter Ball', unlocked: state.ballTypes.includes('darkMatter'), req: 'Prestige: 8, Dark Energy: 200', desc: 'Phase through walls, reality distortion', tier: 4},
+      {name: '⚫ Void Ball', unlocked: state.ballTypes.includes('void'), req: 'Prestige: 12, Reality Bends: 100', desc: 'Space-time warping, ultimate resource generation', tier: 4},
+      {name: '💫 Graviton Ball', unlocked: state.ballTypes.includes('graviton'), req: 'Prestige: 10, Graviton Waves: 50', desc: 'Gravity wells, space warping fields', tier: 4},
+      
+      // Cosmic Interactive Systems
+      {name: '🎯 Cosmic Homing', unlocked: state.interaction.homingUnlocked, req: 'Cosmic Ball + Prestige: 5', desc: 'Click cosmic balls to home to targets', tier: 3},
+      {name: '🤖 Agentic AI', unlocked: state.automation.agentic, req: 'Prestige: 7, Cosmic Energy: 100', desc: 'AI automation and optimization systems', tier: 4},
+      {name: '🌀 Reality Manipulator', unlocked: state.mul.realityBend && state.mul.realityBend > 1, req: 'Prestige: 15, Reality Bends: 500', desc: 'Cosmic decay and reality bending effects', tier: 5},
+      
+      // Fuel Buildings Chain
+      {name: '⭐ Stellar Furnace', unlocked: Buildings.stellarFurnace && Buildings.stellarFurnace.n > 0, req: 'Prestige: 5, Cosmic Energy: 50', desc: 'Produces Hydrogen + Helium fuel', tier: 3},
+      {name: '⚛️ Fusion Reactor', unlocked: Buildings.fusionReactor && Buildings.fusionReactor.n > 0, req: 'Hydrogen: 100', desc: 'Consumes Hydrogen → Cosmic Energy + Photon Energy', tier: 3},
+      {name: '🌑 Dark Energy Harvester', unlocked: Buildings.darkEnergyHarvester && Buildings.darkEnergyHarvester.n > 0, req: 'Prestige: 8, Void Essence: 1', desc: 'Consumes Void Essence → Dark Energy + Dark Matter Fuel', tier: 4},
+      {name: '🌊 Cosmic Accelerator', unlocked: Buildings.cosmicAccelerator && Buildings.cosmicAccelerator.n > 0, req: 'Photon Energy: 500, Light Years: 20', desc: 'Consumes Photon Energy → Graviton Waves + Space Fabric', tier: 4},
+      {name: '🏭 Reality Engine', unlocked: Buildings.realityEngine && Buildings.realityEngine.n > 0, req: 'Prestige: 15, Reality Bends: 1,000', desc: 'Consumes Space Fabric → ALL cosmic resources', tier: 5},
+      
+      // Ultimate Unlocks
+      {name: 'Genesis Reset', unlocked: state.prestige.level >= 3 && state.stats.wallHits >= 10000 && (state.resources.antimatter >= 5 || state.prestige.genesis), req: 'Prestige: 3, Wall Hits: 10,000, Antimatter: 5', desc: 'Ultimate reset with permanent bonuses', tier: 5}
     ];
     
+    // Group unlocks by tier
+    const tierNames = {1: 'Early Game', 2: 'Mid Game', 3: 'Cosmic Phase', 4: 'Advanced Cosmic', 5: 'Ultimate'};
+    const tierGroups = {};
     unlocks.forEach(unlock => {
-      html += `<div class="progress-item ${unlock.unlocked?'completed':''}">`;
-      html += `<div><strong>${unlock.name}</strong> ${unlock.unlocked ? '✓' : '✗'}</div>`;
-      html += `</div>`;
-      html += `<div style="font-size:10px;color:var(--muted);margin:4px 0;">${unlock.desc}</div>`;
-      html += `<div style="font-size:10px;color:${unlock.unlocked?'#4f4':'var(--muted)'};margin-bottom:12px;">${unlock.req}</div>`;
+      if (!tierGroups[unlock.tier]) tierGroups[unlock.tier] = [];
+      tierGroups[unlock.tier].push(unlock);
+    });
+    
+    Object.keys(tierGroups).sort().forEach(tier => {
+      html += `<h5 style="color:#4af;margin:16px 0 8px 0;">${tierNames[tier]} Features</h5>`;
+      tierGroups[tier].forEach(unlock => {
+        const unlockStatus = unlock.unlocked;
+        html += `<div class="progress-item ${unlockStatus?'completed':''}">`;
+        html += `<div><strong>${unlock.name}</strong> ${unlockStatus ? '✓' : '✗'}</div>`;
+        html += `</div>`;
+        html += `<div style="font-size:10px;color:var(--muted);margin:4px 0;">${unlock.desc}</div>`;
+        html += `<div style="font-size:10px;color:${unlockStatus?'#4f4':'var(--muted)'};margin-bottom:12px;">${unlock.req}</div>`;
+      });
     });
     html += '</div>';
+    
+    // Cosmic Resources Progress - NEW SECTION
+    html += '<div class="progress-section">';
+    html += '<h4>🌌 Cosmic Resources</h4>';
+    const cosmicResources = [
+      {name: 'Cosmic Energy', current: state.resources.cosmicEnergy || 0, key: 'cosmicEnergy', desc: 'Generated by cosmic balls and fusion reactors'},
+      {name: 'Dark Energy', current: state.resources.darkEnergy || 0, key: 'darkEnergy', desc: 'Produced by dark energy harvesters'},
+      {name: 'Void Essence', current: state.resources.voidEssence || 0, key: 'voidEssence', desc: 'Ultimate resource from void balls'},
+      {name: 'Space Fabric', current: state.resources.spaceFabric || 0, key: 'spaceFabric', desc: 'Reality manipulation material'},
+      {name: 'Light Years', current: state.resources.lightYears || 0, key: 'lightYears', desc: 'Photon-based dimensional measurement'},
+      {name: 'Hydrogen', current: state.resources.hydrogen || 0, key: 'hydrogen', desc: 'Fuel for fusion reactors'},
+      {name: 'Helium', current: state.resources.helium || 0, key: 'helium', desc: 'Secondary fusion fuel'},
+      {name: 'Dark Matter Fuel', current: state.resources.darkMatterFuel || 0, key: 'darkMatterFuel', desc: 'Powers dark energy systems'},
+      {name: 'Photon Energy', current: state.resources.photonEnergy || 0, key: 'photonEnergy', desc: 'Light-based energy for cosmic acceleration'},
+      {name: 'Graviton Waves', current: state.resources.gravitonWaves || 0, key: 'gravitonWaves', desc: 'Gravitational field manipulation'}
+    ];
+    
+    cosmicResources.forEach(res => {
+      if(res.current > 0 || state.prestige.level >= 3) { // Show if player has resource or is experienced
+        html += `<div class="progress-item">`;
+        html += `<span><strong>${res.name}</strong></span><span>${res.current.toFixed(2)}</span>`;
+        html += `</div>`;
+        html += `<div style="font-size:10px;color:var(--muted);margin-bottom:8px;">${res.desc}</div>`;
+      }
+    });
+    
+    // Fuel Chain Guide
+    if(state.prestige.level >= 3) {
+      html += '<h5 style="color:#fa4;margin:16px 0 8px 0;">⛽ Fuel Production Chain</h5>';
+      html += '<div style="font-size:11px;color:var(--muted);line-height:1.4;margin-bottom:12px;">';
+      html += 'Stellar Furnace → Hydrogen + Helium<br>';
+      html += '↓ Fusion Reactor (consumes Hydrogen)<br>';
+      html += '→ Cosmic Energy + Photon Energy<br>';
+      html += '↓ Cosmic Accelerator (consumes Photon Energy)<br>';
+      html += '→ Graviton Waves + Space Fabric<br>';
+      html += '↓ Reality Engine (consumes Space Fabric)<br>';
+      html += '→ ALL cosmic resources';
+      html += '</div>';
+    }
+    html += '</div>';
+    
+    // Ball Interaction Guide - NEW SECTION
+    if(state.ballTypes.length > 1 || state.stats.ballInteractions > 0) {
+      html += '<div class="progress-section">';
+      html += '<h4>⚡ Ball Click Effects</h4>';
+      html += '<div style="font-size:10px;color:var(--muted);margin-bottom:8px;">Click balls for unique effects (costs vitality)</div>';
+      
+      const ballEffects = [
+        {type: 'basic', name: '🔵 Basic Ball', effect: 'Speed Boost', desc: 'Always available', unlocked: true},
+        {type: 'energy', name: '⚡ Energy Ball', effect: 'Energy Burst', desc: '100+ total energy', unlocked: state.ballTypes.includes('energy')},
+        {type: 'quantum', name: '🟠 Quantum Ball', effect: 'Quantum Tunnel', desc: 'Quantum balls unlocked', unlocked: state.ballTypes.includes('quantum')},
+        {type: 'antimatter', name: '🔴 Antimatter Ball', effect: 'Antimatter Explosion', desc: 'Antimatter balls unlocked', unlocked: state.ballTypes.includes('antimatter')},
+        {type: 'cosmic', name: '🌌 Cosmic Ball', effect: 'Homing Attack', desc: 'Prestige 5 + Cosmic Homing upgrade', unlocked: state.ballTypes.includes('cosmic')},
+        {type: 'photon', name: '💡 Photon Ball', effect: 'Light Burst', desc: 'Affects ALL balls', unlocked: state.ballTypes.includes('photon')},
+        {type: 'darkMatter', name: '🖤 Dark Matter Ball', effect: 'Phase Shift', desc: '3s wall phasing', unlocked: state.ballTypes.includes('darkMatter')},
+        {type: 'void', name: '⚫ Void Ball', effect: 'Void Warp', desc: 'Reality distortion', unlocked: state.ballTypes.includes('void')},
+        {type: 'graviton', name: '💫 Graviton Ball', effect: 'Gravity Well', desc: '5s gravitational field', unlocked: state.ballTypes.includes('graviton')}
+      ];
+      
+      ballEffects.forEach(ball => {
+        if(ball.unlocked) {
+          html += `<div class="progress-item completed">`;
+          html += `<span><strong>${ball.name}</strong></span><span>${ball.effect}</span>`;
+          html += `</div>`;
+          html += `<div style="font-size:10px;color:var(--muted);margin-bottom:8px;">${ball.desc}</div>`;
+        }
+      });
+      
+      html += '</div>';
+    }
     
     // Statistics
     html += '<div class="progress-section">';

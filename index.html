@@ -11,7 +11,7 @@
     .title{color:var(--accent);margin:0 0 10px 0;letter-spacing:.4px}
     .crt{background:var(--panel);border:1px solid var(--border);box-shadow:0 0 0 1px #000 inset}
     #gameCanvas{display:block;width:100%;max-width:860px;aspect-ratio:40/21;border:1px dashed var(--border);background:#000;margin:0 auto;touch-action:manipulation}
-    .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+    .grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:12px}
     .section{padding:10px;border:1px solid var(--border)}
     .section h2{margin:0 0 8px 0;font-size:13px;color:var(--muted)}
     .mono{white-space:pre-wrap}
@@ -21,6 +21,10 @@
     button.disabled{opacity:.5;cursor:not-allowed}
     #tests{font-size:12px;color:#9aa0a6;white-space:pre-wrap;margin-top:8px}
     @media (max-width:720px){ .grid{grid-template-columns:1fr} button{width:100%;padding:12px 14px;font-size:16px} .title{font-size:16px} .section h2{font-size:12px} }
+    .milestone{background:#1a1a1a;border-left:3px solid #4af;padding:4px 8px;margin:2px 0;font-size:11px}
+    .milestone.completed{border-color:#4f4;color:#9f9}
+    .prestige-button{border-color:#f4a !important;color:#f4a}
+    .prestige-button:hover{background:#f4a;color:#000}
   </style>
 </head>
 <body>
@@ -35,6 +39,11 @@
           <span>pixels: <span id="pixelsDisplay">0</span></span>
           <span>energy: <span id="energyDisplay">0</span></span>
           <span>science: <span id="scienceDisplay">0</span></span>
+          <span id="quantumRow" style="display:none">quantum: <span id="quantumDisplay">0</span></span>
+          <span id="antimatterRow" style="display:none">antimatter: <span id="antimatterDisplay">0</span></span>
+        </div>
+        <div id="prestigeInfo" class="mono" style="display:none;margin-top:8px;color:#f4a">
+          prestige lvl: <span id="prestigeLevel">0</span> | points: <span id="prestigePoints">0</span>
         </div>
         <pre id="tests"></pre>
       </div>
@@ -50,6 +59,14 @@
         <h2>// research</h2>
         <div id="research" class="mono"></div>
       </div>
+      <div class="section crt" id="prestigeSection" style="display:none">
+        <h2>// prestige</h2>
+        <div id="prestige" class="mono"></div>
+      </div>
+      <div class="section crt">
+        <h2>// milestones</h2>
+        <div id="milestones" class="mono"></div>
+      </div>
     </div>
   </div>
 
@@ -58,7 +75,17 @@
   const canvas = document.getElementById('gameCanvas');
   const ctx = canvas.getContext('2d');
   let cssW = 800, cssH = 420, dprScale = 1;
-  const state = { resources:{pixels:0,energy:0,science:0}, balls:[], mul:{pixel:1,energy:1} };
+  const state = { 
+    resources:{pixels:0,energy:0,science:0,quantum:0,antimatter:0}, 
+    balls:[], 
+    mul:{pixel:1,energy:1,science:1}, 
+    prestige:{level:0,points:0,unlocks:{}},
+    milestones:{},
+    automation:{autoClick:false,autoBuy:false,autoResearch:false},
+    ballTypes:['basic'],
+    challengeMode:false,
+    stats:{totalPixels:0,totalEnergy:0,totalScience:0,ballsSpawned:1,wallHits:0}
+  };
 
   function randSign(){ return Math.random()>.5?1:-1 }
 
@@ -91,33 +118,116 @@
     extra:  { name:'spawn ball',cost:{pixels:40}, run(){ state.balls.push(createBall()); this.cost.pixels=Math.ceil(this.cost.pixels*1.6);} },
     pMult:  { name:'pixel x2',  cost:{energy:60}, run(){ state.mul.pixel*=2; this.cost.energy=Math.ceil(this.cost.energy*3);} },
     eMult:  { name:'energy x2', cost:{pixels:70}, run(){ state.mul.energy*=2; this.cost.pixels=Math.ceil(this.cost.pixels*3);} },
+    sBall:  { name:'energy ball', cost:{energy:200,science:10}, run(){ state.ballTypes.push('energy'); state.balls.push(createBall('energy')); this.cost.energy*=2; this.cost.science*=1.5; }, visible:()=>state.prestige.level>=1},
+    qBall:  { name:'quantum ball', cost:{science:500,quantum:1}, run(){ state.ballTypes.push('quantum'); state.balls.push(createBall('quantum')); this.cost.science*=3; this.cost.quantum*=2; }, visible:()=>state.prestige.level>=2},
+    autoClick: { name:'auto-click', cost:{pixels:1000,energy:500}, run(){ state.automation.autoClick=true; delete Upgrades.autoClick; buildUpgrades(); }},
+    autoBuy:   { name:'auto-buy', cost:{science:100,quantum:5}, run(){ state.automation.autoBuy=true; delete Upgrades.autoBuy; buildUpgrades(); }, visible:()=>state.prestige.level>=1}
   };
 
   const Buildings = {
-    pgen: { name:'pixel-gen', cost:{energy:25}, prod:{pixels:.15}, n:0 },
-    ecap: { name:'collector', cost:{pixels:35}, prod:{energy:.10}, n:0 },
-    lab : { name:'lab',       cost:{pixels:80, energy:40}, prod:{science:.05}, n:0 },
+    pgen: { name:'pixel-gen', cost:{energy:25}, prod:{pixels:.15}, n:0, tier:1 },
+    ecap: { name:'collector', cost:{pixels:35}, prod:{energy:.10}, n:0, tier:1 },
+    lab : { name:'lab',       cost:{pixels:80, energy:40}, prod:{science:.05}, n:0, tier:1 },
+    quantumGen: { name:'quantum-gen', cost:{science:200,energy:1000}, prod:{quantum:.02}, n:0, tier:2, visible:()=>state.prestige.level>=1 },
+    antimatterGen: { name:'antimatter-gen', cost:{quantum:50,pixels:10000}, prod:{antimatter:.01}, n:0, tier:3, visible:()=>state.prestige.level>=2 },
+    megaLab: { name:'mega-lab', cost:{antimatter:1,science:5000}, prod:{science:2}, n:0, tier:3, visible:()=>state.prestige.level>=2 },
+    autoFactory: { name:'auto-factory', cost:{antimatter:5,quantum:100}, prod:{pixels:10,energy:5}, n:0, tier:4, visible:()=>state.prestige.level>=3 }
   };
 
   const Research = {
     physics: { name:'physics', cost:{science:120}, run(){ state.balls.forEach(b=>{b.vx*=1.07; b.vy*=1.07;}); delete Research.physics; buildResearch(); } },
     cache:   { name:'cache',   cost:{science:250}, run(){ savePeriod=2500; delete Research.cache; buildResearch(); } },
+    ballPhysics: { name:'collision-bonus', cost:{science:500}, run(){ state.mul.collisionBonus=2; delete Research.ballPhysics; buildResearch(); } },
+    quantumTheory: { name:'quantum-theory', cost:{science:1000,quantum:2}, run(){ state.mul.quantum=2; delete Research.quantumTheory; buildResearch(); }, visible:()=>state.prestige.level>=1 },
+    timeAccel: { name:'time-acceleration', cost:{antimatter:1,quantum:10}, run(){ state.mul.timeScale=1.5; delete Research.timeAccel; buildResearch(); }, visible:()=>state.prestige.level>=2 },
+    prestigeUnlock: { name:'enable-prestige', cost:{science:2000,quantum:5}, run(){ state.prestige.unlocked=true; delete Research.prestigeUnlock; buildResearch(); updatePrestige(); }, visible:()=>!state.prestige.unlocked&&state.stats.totalPixels>=50000 }
   };
 
-  // ---------- helpers ----------
-  function createBall(){
-    const s = Math.random()*1.4 + 1.2;
-    return { x: cssW/2, y: cssH/2, vx: randSign()*s, vy: randSign()*s, r: 8 };
+  const Milestones = {
+    firstWall: { name:'First Impact', desc:'Hit a wall', threshold:1, stat:'wallHits', reward:'Unlock speed upgrade', completed:false },
+    thousand: { name:'Pixel Collector', desc:'Generate 1000 pixels', threshold:1000, stat:'totalPixels', reward:'+10% pixel generation', completed:false },
+    tenK: { name:'Energy Master', desc:'Generate 10K energy', threshold:10000, stat:'totalEnergy', reward:'Unlock energy multiplier', completed:false },
+    ballMaster: { name:'Ball Spawner', desc:'Spawn 50 balls', threshold:50, stat:'ballsSpawned', reward:'Balls start 20% faster', completed:false },
+    scienceFirst: { name:'Researcher', desc:'Generate 100 science', threshold:100, stat:'totalScience', reward:'Lab efficiency +50%', completed:false }
+  };
+
+  // ---------- ball types & creation ----------
+  const BallTypes = {
+    basic: { name: 'Basic Ball', color: '#e6e6e6', r: 8, speed: 1, pixelMult: 1, energyMult: 1 },
+    energy: { name: 'Energy Ball', color: '#4af', r: 10, speed: 0.8, pixelMult: 0.5, energyMult: 3 },
+    quantum: { name: 'Quantum Ball', color: '#f4a', r: 6, speed: 1.5, pixelMult: 2, energyMult: 0.8, quantumGen: 0.1 },
+    antimatter: { name: 'Antimatter Ball', color: '#fa4', r: 12, speed: 0.6, pixelMult: 5, energyMult: 5, antimatterGen: 0.05 }
+  };
+
+  function createBall(type = 'basic'){
+    const ballType = BallTypes[type];
+    const s = (Math.random()*1.4 + 1.2) * ballType.speed;
+    state.stats.ballsSpawned++;
+    return { 
+      x: cssW/2, y: cssH/2, 
+      vx: randSign()*s, vy: randSign()*s, 
+      r: ballType.r, 
+      type: type,
+      color: ballType.color,
+      age: 0,
+      specialCooldown: 0
+    };
   }
   function can(cost){ return Object.entries(cost).every(([k,v]) => (state.resources[k]||0) >= v ); }
   function pay(cost){ for(const [k,v] of Object.entries(cost)) state.resources[k]-=v; }
   function costStr(cost){ return Object.entries(cost).map(([k,v])=>`${v} ${k}`).join(', '); }
+
+  function updateBuildingCost(key){
+    const bld = Buildings[key];
+    for(const [res, cost] of Object.entries(bld.cost)){
+      bld.cost[res] = Math.ceil(cost * 1.15);
+    }
+  }
+
+  function canPrestige(){ 
+    return state.stats.totalPixels >= 100000 || state.stats.totalEnergy >= 50000; 
+  }
+  function calculatePrestigePoints(){ 
+    return Math.floor(Math.sqrt(state.stats.totalPixels / 100000) + Math.sqrt(state.stats.totalEnergy / 50000)); 
+  }
+  function doPrestige(){
+    const points = calculatePrestigePoints();
+    state.prestige.points += points;
+    state.prestige.level++;
+    // Reset progress but keep some things
+    const keepBalls = Math.floor(state.balls.length / 3);
+    state.resources = {pixels:0,energy:0,science:0,quantum:state.resources.quantum||0,antimatter:state.resources.antimatter||0};
+    state.balls = state.balls.slice(0, keepBalls);
+    for(const bld of Object.values(Buildings)) bld.n = 0;
+    // Reset building costs
+    Buildings.pgen.cost = {energy:25};
+    Buildings.ecap.cost = {pixels:35}; 
+    Buildings.lab.cost = {pixels:80,energy:40};
+    refresh(true);
+  }
+
+  function applyMilestoneReward(key, milestone){
+    switch(key){
+      case 'thousand': state.mul.pixel *= 1.1; break;
+      case 'ballMaster': state.balls.forEach(b => { b.vx *= 1.2; b.vy *= 1.2; }); break;
+      case 'scienceFirst': state.mul.science = (state.mul.science || 1) * 1.5; break;
+    }
+  }
+
+  function updatePrestige(){
+    const section = document.getElementById('prestigeSection');
+    if(state.prestige.unlocked){
+      section.style.display = 'block';
+      document.getElementById('prestigeInfo').style.display = 'block';
+    }
+  }
 
   // ---------- UI build & updates ----------
   function line(label,id){ const b=document.createElement('button'); b.id=id; b.textContent=label; return b; }
 
   function buildUpgrades(){ const root=document.getElementById('upgrades'); root.innerHTML='';
     for(const [k,u] of Object.entries(Upgrades)){
+      if(u.visible && !u.visible()) continue;
       const b=line(`${u.name}  [${costStr(u.cost)}]`,`u_${k}`);
       b.onclick=()=>{ if(can(u.cost)){ pay(u.cost); u.run(); refresh(true); } };
       root.appendChild(b);
@@ -125,29 +235,57 @@
   }
   function buildBuildings(){ const root=document.getElementById('buildings'); root.innerHTML='';
     for(const [k,bld] of Object.entries(Buildings)){
+      if(bld.visible && !bld.visible()) continue;
       const b=line(`${bld.name} x${bld.n}  [${costStr(bld.cost)}]`,`b_${k}`);
-      b.onclick=()=>{ if(can(bld.cost)){ pay(bld.cost); bld.n++; refresh(true); } };
+      b.onclick=()=>{ if(can(bld.cost)){ pay(bld.cost); bld.n++; updateBuildingCost(k); refresh(true); } };
       root.appendChild(b);
     }
   }
   function buildResearch(){ const root=document.getElementById('research'); root.innerHTML='';
     for(const [k,r] of Object.entries(Research)){
+      if(r.visible && !r.visible()) continue;
       const b=line(`${r.name}  [${costStr(r.cost)}]`,`r_${k}`);
       b.onclick=()=>{ if(can(r.cost)){ pay(r.cost); r.run(); refresh(true); } };
       root.appendChild(b);
     }
   }
+  function buildPrestige(){ const root=document.getElementById('prestige'); if(!root) return; root.innerHTML='';
+    if(state.prestige.unlocked && canPrestige()){
+      const points = calculatePrestigePoints();
+      const b=line(`PRESTIGE [gain ${points} points]`,`prestige_btn`);
+      b.className += ' prestige-button';
+      b.onclick=()=>{ doPrestige(); };
+      root.appendChild(b);
+    }
+  }
+  function buildMilestones(){ const root=document.getElementById('milestones'); if(!root) return; root.innerHTML='';
+    for(const [k,m] of Object.entries(Milestones)){
+      const progress = state.stats[m.stat] || 0;
+      const completed = progress >= m.threshold;
+      if(completed && !m.completed){ 
+        m.completed = true; 
+        applyMilestoneReward(k, m); 
+      }
+      const div = document.createElement('div');
+      div.className = `milestone ${completed?'completed':''}`;
+      div.textContent = `${m.name}: ${m.desc} (${progress}/${m.threshold}) → ${m.reward}`;
+      root.appendChild(div);
+    }
+  }
 
   function updateAfford(){
     for(const [k,u] of Object.entries(Upgrades)){
+      if(u.visible && !u.visible()) continue;
       const el=document.getElementById(`u_${k}`); if(!el) continue;
       el.classList.toggle('disabled', !can(u.cost)); el.textContent = `${u.name}  [${costStr(u.cost)}]`;
     }
     for(const [k,bld] of Object.entries(Buildings)){
+      if(bld.visible && !bld.visible()) continue;
       const el=document.getElementById(`b_${k}`); if(!el) continue;
       el.classList.toggle('disabled', !can(bld.cost)); el.textContent = `${bld.name} x${bld.n}  [${costStr(bld.cost)}]`;
     }
     for(const [k,r] of Object.entries(Research)){
+      if(r.visible && !r.visible()) continue;
       const el=document.getElementById(`r_${k}`); if(!el) continue;
       el.classList.toggle('disabled', !can(r.cost)); el.textContent = `${r.name}  [${costStr(r.cost)}]`;
     }
@@ -157,26 +295,73 @@
     document.getElementById('pixelsDisplay').textContent = state.resources.pixels.toFixed(1);
     document.getElementById('energyDisplay').textContent = state.resources.energy.toFixed(1);
     document.getElementById('scienceDisplay').textContent = state.resources.science.toFixed(1);
-    if(rebuild){ buildUpgrades(); buildBuildings(); buildResearch(); }
+    
+    // Show advanced resources when they exist
+    if(state.resources.quantum > 0) {
+      document.getElementById('quantumRow').style.display = 'block';
+      document.getElementById('quantumDisplay').textContent = state.resources.quantum.toFixed(2);
+    }
+    if(state.resources.antimatter > 0) {
+      document.getElementById('antimatterRow').style.display = 'block'; 
+      document.getElementById('antimatterDisplay').textContent = state.resources.antimatter.toFixed(3);
+    }
+    
+    // Update prestige info
+    if(state.prestige.unlocked){
+      document.getElementById('prestigeLevel').textContent = state.prestige.level;
+      document.getElementById('prestigePoints').textContent = state.prestige.points;
+    }
+    
+    if(rebuild){ buildUpgrades(); buildBuildings(); buildResearch(); buildPrestige(); buildMilestones(); }
     updateAfford();
   }
 
   // ---------- simulation ----------
   function stepBalls(){
     for(const b of state.balls){
-      if(!Number.isFinite(b.vx)||Math.abs(b.vx)<.05) b.vx=randSign()*1.2;
-      if(!Number.isFinite(b.vy)||Math.abs(b.vy)<.05) b.vy=randSign()*1.2;
+      const ballType = BallTypes[b.type] || BallTypes.basic;
+      b.age++;
+      
+      if(!Number.isFinite(b.vx)||Math.abs(b.vx)<.05) b.vx=randSign()*1.2*ballType.speed;
+      if(!Number.isFinite(b.vy)||Math.abs(b.vy)<.05) b.vy=randSign()*1.2*ballType.speed;
       b.x+=b.vx; b.y+=b.vy;
       let hitV=false, hitH=false;
       if(b.x-b.r<=0){ b.x=b.r; b.vx*=-1; hitV=true; }
       else if(b.x+b.r>=cssW){ b.x=cssW-b.r; b.vx*=-1; hitV=true; }
       if(b.y-b.r<=0){ b.y=b.r; b.vy*=-1; hitH=true; }
       else if(b.y+b.r>=cssH){ b.y=cssH-b.r; b.vy*=-1; hitH=true; }
-      if(hitV&&hitH){ state.resources.pixels += 2*state.mul.pixel; state.resources.energy += 1*state.mul.energy; }
-      else if(hitV||hitH){ state.resources.pixels += 1*state.mul.pixel; state.resources.energy += .5*state.mul.energy; }
+      
+      if(hitV||hitH){
+        state.stats.wallHits++;
+        const collisionBonus = state.mul.collisionBonus || 1;
+        if(hitV&&hitH){ 
+          const pGain = 2*ballType.pixelMult*state.mul.pixel*collisionBonus;
+          const eGain = 1*ballType.energyMult*state.mul.energy*collisionBonus;
+          state.resources.pixels += pGain; 
+          state.resources.energy += eGain;
+          state.stats.totalPixels += pGain;
+          state.stats.totalEnergy += eGain;
+        }
+        else if(hitV||hitH){ 
+          const pGain = 1*ballType.pixelMult*state.mul.pixel*collisionBonus;
+          const eGain = .5*ballType.energyMult*state.mul.energy*collisionBonus;
+          state.resources.pixels += pGain; 
+          state.resources.energy += eGain;
+          state.stats.totalPixels += pGain;
+          state.stats.totalEnergy += eGain;
+        }
+        
+        // Special ball effects
+        if(ballType.quantumGen && Math.random() < 0.1){
+          state.resources.quantum += ballType.quantumGen;
+        }
+        if(ballType.antimatterGen && Math.random() < 0.05){
+          state.resources.antimatter += ballType.antimatterGen;
+        }
+      }
     }
     
-    // Ball-to-ball collision detection
+    // Ball-to-ball collision detection (enhanced)
     for(let i = 0; i < state.balls.length; i++){
       for(let j = i + 1; j < state.balls.length; j++){
         const b1 = state.balls[i];
@@ -188,7 +373,7 @@
         
         if(distance < minDistance && distance > 0){
           // Collision detected - calculate elastic collision response
-          const nx = dx / distance; // normalized collision normal
+          const nx = dx / distance;
           const ny = dy / distance;
           
           // Separate balls to prevent overlap
@@ -216,6 +401,12 @@
           b1.vy += impulse * ny;
           b2.vx -= impulse * nx;
           b2.vy -= impulse * ny;
+          
+          // Collision bonus - different ball types create special effects
+          if(b1.type !== b2.type){
+            state.resources.science += 0.5 * (state.mul.science || 1);
+            state.stats.totalScience += 0.5 * (state.mul.science || 1);
+          }
         }
       }
     }
@@ -226,19 +417,93 @@
     ctx.clearRect(0,0,cssW,cssH);
     // subtle scanlines
     ctx.save(); ctx.globalAlpha=.06; ctx.fillStyle="#fff"; for(let y=0;y<cssH;y+=2){ ctx.fillRect(0,y,cssW,1); } ctx.restore();
-    for(const b of state.balls){ ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,Math.PI*2); ctx.fillStyle='#e6e6e6'; ctx.fill(); }
+    
+    // Draw balls with their specific colors
+    for(const b of state.balls){ 
+      ctx.beginPath(); 
+      ctx.arc(b.x,b.y,b.r,0,Math.PI*2); 
+      ctx.fillStyle = b.color || '#e6e6e6'; 
+      ctx.fill(); 
+      
+      // Add glow effect for special balls
+      if(b.type !== 'basic') {
+        ctx.save();
+        ctx.globalAlpha = 0.3;
+        ctx.beginPath();
+        ctx.arc(b.x,b.y,b.r+2,0,Math.PI*2);
+        ctx.fillStyle = b.color;
+        ctx.fill();
+        ctx.restore();
+      }
+    }
   }
 
-  // passive building production
-  setInterval(()=>{ for(const b of Object.values(Buildings)){ if(b.n>0){ for(const [k,v] of Object.entries(b.prod)) state.resources[k]+=v*b.n; } } refresh(); }, 1000);
+  // passive building production + automation
+  setInterval(()=>{ 
+    const timeScale = state.mul.timeScale || 1;
+    for(const b of Object.values(Buildings)){ 
+      if(b.n>0){ 
+        for(const [k,v] of Object.entries(b.prod)) {
+          const gain = v*b.n*timeScale;
+          state.resources[k]+=gain;
+          if(k==='pixels') state.stats.totalPixels += gain;
+          if(k==='energy') state.stats.totalEnergy += gain; 
+          if(k==='science') state.stats.totalScience += gain;
+        }
+      } 
+    } 
+    
+    // Auto-buy cheapest building if automation is on
+    if(state.automation.autoBuy){
+      for(const [k,bld] of Object.entries(Buildings)){
+        if(can(bld.cost)){
+          pay(bld.cost); 
+          bld.n++; 
+          updateBuildingCost(k);
+          break;
+        }
+      }
+    }
+    
+    buildMilestones();
+    refresh(); 
+  }, 1000);
 
   // main loop
   function loop(){ stepBalls(); draw(); requestAnimationFrame(loop); }
 
   // ---------- persistence ----------
   let savePeriod = 5000;
-  function save(){ try{ localStorage.setItem('tty_idle_save', JSON.stringify({r:state.resources, balls:state.balls, b:Object.fromEntries(Object.entries(Buildings).map(([k,v])=>[k,v.n])), mul:state.mul})) }catch(e){} }
-  function load(){ try{ const d=JSON.parse(localStorage.getItem('tty_idle_save')||'null'); if(!d) return; if(d.r) Object.assign(state.resources,d.r); if(d.mul) Object.assign(state.mul,d.mul); if(d.balls&&Array.isArray(d.balls)&&d.balls.length) state.balls=d.balls; if(d.b){ for(const [k,n] of Object.entries(d.b)) if(Buildings[k]) Buildings[k].n=n; } }catch(e){} }
+  function save(){ 
+    try{ 
+      localStorage.setItem('tty_idle_save', JSON.stringify({
+        r:state.resources, 
+        balls:state.balls, 
+        b:Object.fromEntries(Object.entries(Buildings).map(([k,v])=>[k,v.n])), 
+        mul:state.mul,
+        prestige:state.prestige,
+        milestones:state.milestones,
+        automation:state.automation,
+        ballTypes:state.ballTypes,
+        stats:state.stats
+      })) 
+    }catch(e){} 
+  }
+  function load(){ 
+    try{ 
+      const d=JSON.parse(localStorage.getItem('tty_idle_save')||'null'); 
+      if(!d) return; 
+      if(d.r) Object.assign(state.resources,d.r); 
+      if(d.mul) Object.assign(state.mul,d.mul); 
+      if(d.prestige) Object.assign(state.prestige,d.prestige);
+      if(d.milestones) Object.assign(state.milestones,d.milestones);
+      if(d.automation) Object.assign(state.automation,d.automation);
+      if(d.ballTypes) state.ballTypes = d.ballTypes;
+      if(d.stats) Object.assign(state.stats,d.stats);
+      if(d.balls&&Array.isArray(d.balls)&&d.balls.length) state.balls=d.balls; 
+      if(d.b){ for(const [k,n] of Object.entries(d.b)) if(Buildings[k]) Buildings[k].n=n; } 
+    }catch(e){} 
+  }
   setInterval(save, 5000);
 
   // ---------- tiny test runner ----------
@@ -247,13 +512,15 @@
     // createBall sanity
     const tb = createBall(); ok('createBall returns object', tb && typeof tb==='object');
     ok('ball in bounds (x)', tb.x>=tb.r && tb.x<=cssW-tb.r); ok('ball in bounds (y)', tb.y>=tb.r && tb.y<=cssH-tb.r);
+    ok('ball has type', tb.type === 'basic');
     // can/pay
     state.resources.pixels=100; state.resources.energy=100; const c={pixels:10,energy:5}; ok('can() true', can(c)); pay(c); ok('pay() deducts', state.resources.pixels===90 && state.resources.energy===95);
     // UI built
-    buildUpgrades(); buildBuildings(); buildResearch();
-    ok('upgrades exist', Object.keys(Upgrades).every(k=>document.getElementById('u_'+k)));
-    ok('buildings exist', Object.keys(Buildings).every(k=>document.getElementById('b_'+k)));
-    ok('research exist', Object.keys(Research).every(k=>document.getElementById('r_'+k)));
+    buildUpgrades(); buildBuildings(); buildResearch(); buildMilestones();
+    ok('upgrades exist', Object.keys(Upgrades).filter(k=>!Upgrades[k].visible || Upgrades[k].visible()).every(k=>document.getElementById('u_'+k)));
+    ok('buildings exist', Object.keys(Buildings).filter(k=>!Buildings[k].visible || Buildings[k].visible()).every(k=>document.getElementById('b_'+k)));
+    ok('research exist', Object.keys(Research).filter(k=>!Research[k].visible || Research[k].visible()).every(k=>document.getElementById('r_'+k)));
+    ok('milestones exist', document.getElementById('milestones').children.length > 0);
     // stepBalls keeps bounds
     state.balls=[createBall()]; for(let i=0;i<200;i++) stepBalls();
     const b=state.balls[0]; ok('ball still in bounds', b.x>=b.r && b.x<=cssW-b.r && b.y>=b.r && b.y<=cssH-b.r);
@@ -266,7 +533,8 @@
     fitCanvas();
     load();
     if(!state.balls.length) state.balls=[createBall()];
-    buildUpgrades(); buildBuildings(); buildResearch();
+    updatePrestige();
+    buildUpgrades(); buildBuildings(); buildResearch(); buildPrestige(); buildMilestones();
     refresh();
     runTests();
     loop();

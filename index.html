@@ -220,6 +220,20 @@
           <span>science: <span id="scienceDisplay">0</span><span id="scienceRate" style="color:#4af;font-size:10px"></span></span>
           <span id="quantumRow" style="display:none">quantum: <span id="quantumDisplay">0</span><span id="quantumRate" style="color:#f4a;font-size:10px"></span></span>
           <span id="antimatterRow" style="display:none">antimatter: <span id="antimatterDisplay">0</span><span id="antimatterRate" style="color:#fa4;font-size:10px"></span></span>
+          
+          <!-- Cosmic-tier resources -->
+          <span id="cosmicEnergyRow" style="display:none">cosmic energy: <span id="cosmicEnergyDisplay">0</span><span id="cosmicEnergyRate" style="color:#ff6b9d;font-size:10px"></span></span>
+          <span id="darkEnergyRow" style="display:none">dark energy: <span id="darkEnergyDisplay">0</span><span id="darkEnergyRate" style="color:#2d1b69;font-size:10px"></span></span>
+          <span id="voidEssenceRow" style="display:none">void essence: <span id="voidEssenceDisplay">0</span><span id="voidEssenceRate" style="color:#000000;font-size:10px"></span></span>
+          <span id="spaceFabricRow" style="display:none">space fabric: <span id="spaceFabricDisplay">0</span><span id="spaceFabricRate" style="color:#a020f0;font-size:10px"></span></span>
+          <span id="lightYearsRow" style="display:none">light years: <span id="lightYearsDisplay">0</span><span id="lightYearsRate" style="color:#ffff00;font-size:10px"></span></span>
+          
+          <!-- Fuel resources -->
+          <span id="hydrogenRow" style="display:none">hydrogen: <span id="hydrogenDisplay">0</span><span id="hydrogenRate" style="color:#87ceeb;font-size:10px"></span></span>
+          <span id="heliumRow" style="display:none">helium: <span id="heliumDisplay">0</span><span id="heliumRate" style="color:#ffa500;font-size:10px"></span></span>
+          <span id="darkMatterFuelRow" style="display:none">dark matter fuel: <span id="darkMatterFuelDisplay">0</span><span id="darkMatterFuelRate" style="color:#4b0082;font-size:10px"></span></span>
+          <span id="photonEnergyRow" style="display:none">photon energy: <span id="photonEnergyDisplay">0</span><span id="photonEnergyRate" style="color:#fff700;font-size:10px"></span></span>
+          <span id="gravitonWavesRow" style="display:none">graviton waves: <span id="gravitonWavesDisplay">0</span><span id="gravitonWavesRate" style="color:#9400d3;font-size:10px"></span></span>
         </div>
         <div style="margin-top:8px;">
           <button onclick="openProgressModal()" style="font-size:12px;padding:4px 8px;" class="tooltip" data-tooltip="View detailed progression tracking and unlock requirements">view progress</button>
@@ -291,12 +305,18 @@
   const ctx = canvas.getContext('2d');
   let cssW = 800, cssH = 420, dprScale = 1;
   const state = { 
-    resources:{pixels:0,energy:0,science:0,quantum:0,antimatter:0}, 
+    resources:{pixels:0,energy:0,science:0,quantum:0,antimatter:0,
+               // Cosmic-tier resources
+               cosmicEnergy:0,darkEnergy:0,voidEssence:0,spaceFabric:0,lightYears:0,
+               // Fuel resources for buildings
+               hydrogen:0,helium:0,darkMatterFuel:0,photonEnergy:0,gravitonWaves:0}, 
     balls:[], 
     mul:{pixel:1,energy:1,science:1}, 
     prestige:{level:0,points:0,unlocks:{}},
     milestones:{},
-    automation:{autoClick:false,autoBuy:false,autoResearch:false},
+    automation:{autoClick:false,autoBuy:false,autoResearch:false,
+                // New cosmic automation
+                autoHarvest:false,agentic:false},
     ballTypes:['basic'],
     challengeMode:false,
     activeChallenge:null,
@@ -304,14 +324,26 @@
     efficiency:{ballSpeed:1,production:1,cost:1},
     offlineTime:0,
     lastSave:Date.now(),
-    rates:{pixels:0,energy:0,science:0,quantum:0,antimatter:0},
-    stats:{totalPixels:0,totalEnergy:0,totalScience:0,ballsSpawned:1,wallHits:0,ballsLost:0},
-    // New decay system properties
+    rates:{pixels:0,energy:0,science:0,quantum:0,antimatter:0,
+           cosmicEnergy:0,darkEnergy:0,voidEssence:0,spaceFabric:0,lightYears:0,
+           hydrogen:0,helium:0,darkMatterFuel:0,photonEnergy:0,gravitonWaves:0},
+    stats:{totalPixels:0,totalEnergy:0,totalScience:0,ballsSpawned:1,wallHits:0,ballsLost:0,
+           // Cosmic stats
+           cosmicCollisions:0,realityBends:0,homingClicks:0,agenticActions:0},
+    // New cosmic interaction system
+    interaction:{
+      homingActive:false,
+      homingTarget:null,
+      homingCooldown:0,
+      selectedBall:null
+    },
+    // Enhanced decay system with cosmic properties
     decay:{
       globalDecayRate:1.0, // Global multiplier for all decay rates
       vitalityRecoveryRate:0.0, // Rate at which vitality recovers per collision
       decayEnabled:true, // Whether decay system is active
-      showDecayUI:false // Whether to show detailed decay status (starts hidden)
+      showDecayUI:false, // Whether to show detailed decay status (starts hidden)
+      cosmicDecay:false // Special decay that affects reality itself
     }
   };
 
@@ -360,6 +392,34 @@
     sBall:  { name:'energy ball', cost:{energy:500,science:50}, run(){ state.ballTypes.push('energy'); state.balls.push(createBall('energy')); this.cost.energy*=2; this.cost.science*=1.5; }, visible:()=>state.stats.totalScience>=100&&state.stats.totalEnergy>=5000},
     qBall:  { name:'quantum ball', cost:{science:1500,energy:2000}, run(){ state.ballTypes.push('quantum'); state.balls.push(createBall('quantum')); this.cost.science*=3; this.cost.energy*=2; }, visible:()=>state.stats.totalScience>=500&&state.stats.totalPixels>=25000&&state.prestige.level>=1},
     
+    // Cosmic-tier ball unlocks - require advanced progression
+    cosmicBall: { name:'cosmic ball', cost:{antimatter:25,cosmicEnergy:100}, 
+                  run(){ state.ballTypes.push('cosmic'); state.balls.push(createBall('cosmic')); this.cost.antimatter*=3; this.cost.cosmicEnergy*=2; }, 
+                  visible:()=>state.prestige.level>=5&&state.resources.cosmicEnergy>=50},
+    photonBall: { name:'photon ball', cost:{lightYears:10,photonEnergy:50}, 
+                  run(){ state.ballTypes.push('photon'); state.balls.push(createBall('photon')); this.cost.lightYears*=2; this.cost.photonEnergy*=3; }, 
+                  visible:()=>state.resources.lightYears>=5&&state.stats.cosmicCollisions>=1000},
+    darkMatterBall: { name:'dark matter ball', cost:{darkEnergy:500,darkMatterFuel:100}, 
+                      run(){ state.ballTypes.push('darkMatter'); state.balls.push(createBall('darkMatter')); this.cost.darkEnergy*=2; this.cost.darkMatterFuel*=4; }, 
+                      visible:()=>state.prestige.level>=8&&state.resources.darkEnergy>=200},
+    voidBall: { name:'void ball', cost:{voidEssence:10,spaceFabric:50}, 
+                run(){ state.ballTypes.push('void'); state.balls.push(createBall('void')); this.cost.voidEssence*=5; this.cost.spaceFabric*=3; }, 
+                visible:()=>state.prestige.level>=12&&state.stats.realityBends>=100},
+    gravitonBall: { name:'graviton ball', cost:{gravitonWaves:100,spaceFabric:100}, 
+                    run(){ state.ballTypes.push('graviton'); state.balls.push(createBall('graviton')); this.cost.gravitonWaves*=3; this.cost.spaceFabric*=2; }, 
+                    visible:()=>state.prestige.level>=10&&state.resources.gravitonWaves>=50},
+    
+    // Interactive cosmic systems
+    homingSystem: { name:'ball homing', cost:{antimatter:10,science:5000}, 
+                    run(){ state.interaction.homingUnlocked = true; delete Upgrades.homingSystem; buildUpgrades(); }, 
+                    visible:()=>state.prestige.level>=3&&state.stats.totalScience>=2000},
+    agenticAI: { name:'agentic automation', cost:{cosmicEnergy:200,voidEssence:5}, 
+                 run(){ state.automation.agentic = true; delete Upgrades.agenticAI; buildUpgrades(); }, 
+                 visible:()=>state.prestige.level>=7&&state.resources.cosmicEnergy>=100},
+    realityManipulator: { name:'reality bender', cost:{spaceFabric:500,voidEssence:50}, 
+                          run(){ state.decay.cosmicDecay = true; state.mul.realityBend = 10; delete Upgrades.realityManipulator; buildUpgrades(); }, 
+                          visible:()=>state.prestige.level>=15&&state.stats.realityBends>=500},
+    
     // Automation upgrades - remove manual clicking requirements
     autoClick: { name:'auto-click', cost:{pixels:1000,energy:500}, run(){ state.automation.autoClick=true; delete Upgrades.autoClick; buildUpgrades(); }},
     autoBuy:   { name:'auto-buy', cost:{science:100,energy:800}, run(){ state.automation.autoBuy=true; delete Upgrades.autoBuy; buildUpgrades(); }, visible:()=>state.stats.totalScience>=200},
@@ -389,6 +449,33 @@
     antimatterGen: { name:'antimatter-gen', cost:{quantum:50,pixels:10000}, prod:{antimatter:.01}, n:0, tier:3, visible:()=>state.prestige.level>=2 },
     megaLab: { name:'mega-lab', cost:{antimatter:1,science:5000}, prod:{science:2}, n:0, tier:3, visible:()=>state.prestige.level>=2 },
     autoFactory: { name:'auto-factory', cost:{antimatter:5,quantum:100}, prod:{pixels:10,energy:5}, n:0, tier:4, visible:()=>state.prestige.level>=3 },
+    
+    // Cosmic-tier buildings with fuel requirements
+    stellarFurnace: { name:'stellar furnace', cost:{antimatter:20,cosmicEnergy:100}, 
+                     prod:{hydrogen:1,helium:0.5}, fuel:null, n:0, tier:5,
+                     visible:()=>state.prestige.level>=5&&state.resources.cosmicEnergy>=50 },
+    fusionReactor: { name:'fusion reactor', cost:{hydrogen:500,helium:200}, 
+                    prod:{cosmicEnergy:2,photonEnergy:1}, fuel:'hydrogen', fuelRate:10, n:0, tier:5,
+                    visible:()=>state.resources.hydrogen>=100 },
+    darkEnergyHarvester: { name:'dark energy harvester', cost:{voidEssence:1,spaceFabric:50}, 
+                          prod:{darkEnergy:5,darkMatterFuel:0.1}, fuel:'voidEssence', fuelRate:0.01, n:0, tier:6,
+                          visible:()=>state.prestige.level>=8&&state.resources.voidEssence>=1 },
+    cosmicAccelerator: { name:'cosmic accelerator', cost:{photonEnergy:1000,lightYears:50}, 
+                        prod:{gravitonWaves:3,spaceFabric:1}, fuel:'photonEnergy', fuelRate:50, n:0, tier:6,
+                        visible:()=>state.resources.photonEnergy>=500&&state.resources.lightYears>=20 },
+    realityEngine: { name:'reality engine', cost:{voidEssence:100,spaceFabric:1000,gravitonWaves:500}, 
+                    prod:{cosmicEnergy:50,lightYears:10,voidEssence:1}, fuel:'spaceFabric', fuelRate:5, n:0, tier:7,
+                    visible:()=>state.prestige.level>=15&&state.stats.realityBends>=1000 },
+    
+    // Agentic buildings - AI-controlled resource optimization
+    agenticOptimizer: { name:'agentic optimizer', cost:{cosmicEnergy:1000,darkEnergy:200}, 
+                       prod:{}, n:0, tier:6, 
+                       effect: () => state.automation.agentic ? Math.min(5, Buildings.agenticOptimizer.n * 0.5) : 0,
+                       visible:()=>state.automation.agentic },
+    neuralHarvester: { name:'neural harvester', cost:{voidEssence:50,spaceFabric:200}, 
+                      prod:{}, n:0, tier:7,
+                      effect: () => { if(Buildings.neuralHarvester.n > 0) state.stats.agenticActions += Buildings.neuralHarvester.n * 10; },
+                      visible:()=>state.automation.agentic&&state.prestige.level>=10 },
     
     // Ball vitality support buildings
     vitalityStation: { name:'vitality station', cost:{energy:200,science:50}, prod:{}, n:0, tier:2, 
@@ -426,15 +513,40 @@
   };
 
   const Milestones = {
-    firstWall: { name:'First Impact', desc:'Hit a wall', threshold:1, stat:'wallHits', reward:'Unlock speed upgrade', completed:false },
-    thousand: { name:'Pixel Collector', desc:'Generate 1000 pixels', threshold:1000, stat:'totalPixels', reward:'+10% pixel generation', completed:false },
-    tenK: { name:'Energy Master', desc:'Generate 10K energy', threshold:10000, stat:'totalEnergy', reward:'Unlock energy multiplier', completed:false },
-    ballMaster: { name:'Ball Spawner', desc:'Spawn 50 balls', threshold:50, stat:'ballsSpawned', reward:'Balls start 20% faster', completed:false },
-    scienceFirst: { name:'Researcher', desc:'Generate 100 science', threshold:100, stat:'totalScience', reward:'Lab efficiency +50%', completed:false },
-    survivor: { name:'Survivor', desc:'Lose 10 balls to decay', threshold:10, stat:'ballsLost', reward:'Emergency ball spawn when no balls remain', completed:false }
+    // Basic milestones
+    firstWall: { name:'First Impact', desc:'Hit a wall', threshold:1, stat:'wallHits', reward:'Unlock speed upgrade', completed:false, tier:1 },
+    thousand: { name:'Pixel Collector', desc:'Generate 1000 pixels', threshold:1000, stat:'totalPixels', reward:'+10% pixel generation', completed:false, tier:1 },
+    tenK: { name:'Energy Master', desc:'Generate 10K energy', threshold:10000, stat:'totalEnergy', reward:'Unlock energy multiplier', completed:false, tier:1 },
+    ballMaster: { name:'Ball Spawner', desc:'Spawn 50 balls', threshold:50, stat:'ballsSpawned', reward:'Balls start 20% faster', completed:false, tier:1 },
+    scienceFirst: { name:'Researcher', desc:'Generate 100 science', threshold:100, stat:'totalScience', reward:'Lab efficiency +50%', completed:false, tier:1 },
+    survivor: { name:'Survivor', desc:'Lose 10 balls to decay', threshold:10, stat:'ballsLost', reward:'Emergency ball spawn when no balls remain', completed:false, tier:1 },
+    
+    // Advanced milestones
+    prestigeMaster: { name:'Prestige Pioneer', desc:'Reach prestige level 5', threshold:5, stat:'level', reward:'Unlock cosmic energy generation', completed:false, tier:2 },
+    ballVariety: { name:'Ball Collector', desc:'Unlock 5 ball types', threshold:5, stat:'ballTypesUnlocked', reward:'Ball type synergy bonuses', completed:false, tier:2 },
+    hundredK: { name:'Resource Mogul', desc:'Generate 100K total resources', threshold:100000, stat:'totalResources', reward:'Resource efficiency +25%', completed:false, tier:2 },
+    
+    // Cosmic milestones
+    cosmicAscension: { name:'Cosmic Awakening', desc:'Generate 1000 cosmic energy', threshold:1000, stat:'cosmicEnergy', reward:'Unlock stellar furnace', completed:false, tier:3 },
+    lightSpeed: { name:'Speed of Light', desc:'Travel 100 light years', threshold:100, stat:'lightYears', reward:'Unlock photon manipulation', completed:false, tier:3 },
+    darkMastery: { name:'Dark Energy Harvester', desc:'Collect 5000 dark energy', threshold:5000, stat:'darkEnergy', reward:'Unlock reality bending', completed:false, tier:3 },
+    voidWalker: { name:'Void Walker', desc:'Accumulate 50 void essence', threshold:50, stat:'voidEssence', reward:'Unlock void resistance', completed:false, tier:4 },
+    spaceBender: { name:'Space-Time Manipulator', desc:'Collect 1000 space fabric', threshold:1000, stat:'spaceFabric', reward:'Unlock dimensional travel', completed:false, tier:4 },
+    gravityMaster: { name:'Gravitational Lord', desc:'Generate 10000 graviton waves', threshold:10000, stat:'gravitonWaves', reward:'Unlock singularity control', completed:false, tier:4 },
+    
+    // Interactive milestones  
+    homingExpert: { name:'Homing Specialist', desc:'Successfully home 500 times', threshold:500, stat:'homingClicks', reward:'Reduce homing vitality cost', completed:false, tier:3 },
+    agenticHarmony: { name:'AI Symbiosis', desc:'Complete 50000 agentic actions', threshold:50000, stat:'agenticActions', reward:'Unlock neural enhancement', completed:false, tier:4 },
+    realityBender: { name:'Reality Sculptor', desc:'Bend reality 1000 times', threshold:1000, stat:'realityBends', reward:'Unlock dimensional mastery', completed:false, tier:5 },
+    
+    // Ultimate milestones
+    cosmicUnity: { name:'Cosmic Unity', desc:'Reach prestige level 20', threshold:20, stat:'level', reward:'Unlock universe creation mode', completed:false, tier:5 },
+    infiniteVoid: { name:'Void Master', desc:'Survive 1000 void interactions', threshold:1000, stat:'voidInteractions', reward:'Unlock void mastery', completed:false, tier:5 },
+    singularityLord: { name:'Singularity Lord', desc:'Control 10 gravitational singularities', threshold:10, stat:'singularitiesControlled', reward:'Unlock reality engine', completed:false, tier:5 }
   };
 
   const Challenges = {
+    // Basic challenges
     slowBalls: { 
       name: 'Slow Motion', 
       desc: 'Balls move 50% slower, but collisions give 3x resources', 
@@ -442,7 +554,8 @@
       goal: 'Reach 10000 pixels',
       goalCheck: () => state.resources.pixels >= 10000,
       reward: 'Unlock ball efficiency research',
-      completed: false
+      completed: false,
+      tier: 1
     },
     fewBalls: { 
       name: 'Minimalist', 
@@ -451,7 +564,8 @@
       goal: 'Purchase 10 buildings',
       goalCheck: () => Object.values(Buildings).reduce((sum, b) => sum + b.n, 0) >= 10,
       reward: 'Unlock super-buildings',
-      completed: false
+      completed: false,
+      tier: 1
     },
     expensiveUpgrades: { 
       name: 'Inflation', 
@@ -460,7 +574,87 @@
       goal: 'Reach prestige threshold',
       goalCheck: () => canPrestige(),
       reward: 'Unlock cost efficiency research',
-      completed: false
+      completed: false,
+      tier: 1
+    },
+    
+    // Cosmic-tier challenges - require significant progression
+    vitalityDrain: {
+      name: 'Vitality Crisis',
+      desc: 'Ball vitality decays 10x faster, but cosmic resource generation +1000%',
+      effect: () => ({ vitalityDecayMult: 10, cosmicResourceMult: 10 }),
+      goal: 'Generate 1000 cosmic energy',
+      goalCheck: () => state.resources.cosmicEnergy >= 1000,
+      reward: 'Unlock cosmic energy multiplier',
+      completed: false,
+      tier: 2,
+      unlock: () => state.prestige.level >= 5
+    },
+    quantumEntanglement: {
+      name: 'Quantum Chaos',
+      desc: 'Balls randomly teleport, but quantum generation +500%',
+      effect: () => ({ quantumTeleport: true, quantumMult: 5 }),
+      goal: 'Complete 500 quantum jumps',
+      goalCheck: () => (state.stats.quantumJumps || 0) >= 500,
+      reward: 'Unlock quantum stability field',
+      completed: false,
+      tier: 2,
+      unlock: () => state.ballTypes.includes('quantum')
+    },
+    cosmicStorm: {
+      name: 'Cosmic Storm',
+      desc: 'Reality bends randomly, all balls get cosmic properties',
+      effect: () => ({ realityStorm: true, allBallsCosmic: true }),
+      goal: 'Survive 100 reality bends',
+      goalCheck: () => state.stats.realityBends >= 100,
+      reward: 'Unlock reality anchor',
+      completed: false,
+      tier: 3,
+      unlock: () => state.ballTypes.includes('cosmic')
+    },
+    darkMatterCollapse: {
+      name: 'Dark Matter Collapse',
+      desc: 'Physics break down, but dark energy generation +2000%',
+      effect: () => ({ physicsCollapse: true, darkEnergyMult: 20 }),
+      goal: 'Accumulate 10000 dark energy',
+      goalCheck: () => state.resources.darkEnergy >= 10000,
+      reward: 'Unlock physics restoration chamber',
+      completed: false,
+      tier: 3,
+      unlock: () => state.ballTypes.includes('darkMatter')
+    },
+    voidConsumption: {
+      name: 'Void Consumption',
+      desc: 'Resources slowly vanish into void, but void essence generation +500%',
+      effect: () => ({ voidDecay: 0.01, voidEssenceMult: 5 }),
+      goal: 'Collect 100 void essence',
+      goalCheck: () => state.resources.voidEssence >= 100,
+      reward: 'Unlock void resistance field',
+      completed: false,
+      tier: 4,
+      unlock: () => state.ballTypes.includes('void')
+    },
+    gravitationalSingularity: {
+      name: 'Singularity Event',
+      desc: 'All balls drawn to center, but graviton wave generation extreme',
+      effect: () => ({ gravitationalPull: true, gravitonMult: 50 }),
+      goal: 'Generate 5000 graviton waves',
+      goalCheck: () => state.resources.gravitonWaves >= 5000,
+      reward: 'Unlock singularity mastery',
+      completed: false,
+      tier: 4,
+      unlock: () => state.ballTypes.includes('graviton')
+    },
+    agenticRebellion: {
+      name: 'AI Uprising',
+      desc: 'Agentic systems work against you, but learn advanced optimization',
+      effect: () => ({ agenticRebellion: true, learningMult: 10 }),
+      goal: 'Complete 10000 agentic actions despite rebellion',
+      goalCheck: () => state.stats.agenticActions >= 10000,
+      reward: 'Unlock AI harmony protocol',
+      completed: false,
+      tier: 5,
+      unlock: () => state.automation.agentic && state.prestige.level >= 10
     }
   };
 
@@ -493,17 +687,32 @@
 
   // ---------- ball types & creation ----------
   const BallTypes = {
-    basic: { name: 'Basic Ball', color: '#e6e6e6', r: 8, speed: 1, pixelMult: 1, energyMult: 1, mass: 1.0, restitution: 0.8 },
-    energy: { name: 'Energy Ball', color: '#4af', r: 10, speed: 0.8, pixelMult: 0.5, energyMult: 3, mass: 1.5, restitution: 0.9, quantumGen: 0.05 },
-    quantum: { name: 'Quantum Ball', color: '#f4a', r: 6, speed: 1.5, pixelMult: 2, energyMult: 0.8, mass: 0.6, restitution: 1.2, quantumGen: 0.1 },
-    antimatter: { name: 'Antimatter Ball', color: '#fa4', r: 12, speed: 0.6, pixelMult: 5, energyMult: 5, mass: 2.5, restitution: 0.6, antimatterGen: 0.05 }
+    // Tier 1: Basic balls
+    basic: { name: 'Basic Ball', color: '#e6e6e6', r: 8, speed: 1, pixelMult: 1, energyMult: 1, mass: 1.0, restitution: 0.8, tier: 1 },
+    energy: { name: 'Energy Ball', color: '#4af', r: 10, speed: 0.8, pixelMult: 0.5, energyMult: 3, mass: 1.5, restitution: 0.9, quantumGen: 0.05, tier: 1 },
+    
+    // Tier 2: Advanced balls
+    quantum: { name: 'Quantum Ball', color: '#f4a', r: 6, speed: 1.5, pixelMult: 2, energyMult: 0.8, mass: 0.6, restitution: 1.2, quantumGen: 0.1, tier: 2 },
+    antimatter: { name: 'Antimatter Ball', color: '#fa4', r: 12, speed: 0.6, pixelMult: 5, energyMult: 5, mass: 2.5, restitution: 0.6, antimatterGen: 0.05, tier: 2 },
+    
+    // Tier 3: Cosmic balls - New expansive ball types
+    cosmic: { name: 'Cosmic Ball', color: '#ff6b9d', r: 14, speed: 0.4, pixelMult: 10, energyMult: 8, mass: 3.0, restitution: 0.5, 
+             cosmicGen: 0.02, tier: 3, special: 'gravitational_pull', unlock: { prestige: 5, cosmicEnergy: 100 } },
+    photon: { name: 'Photon Ball', color: '#ffff00', r: 4, speed: 3.0, pixelMult: 0.2, energyMult: 15, mass: 0.1, restitution: 2.0,
+             tier: 3, special: 'light_speed', unlock: { antimatter: 50, lightYears: 10 } },
+    darkMatter: { name: 'Dark Matter Ball', color: '#2d1b69', r: 16, speed: 0.2, pixelMult: 25, energyMult: 2, mass: 5.0, restitution: 0.3,
+                 darkGen: 0.01, tier: 4, special: 'phase_through', unlock: { prestige: 8, darkEnergy: 500 } },
+    void: { name: 'Void Ball', color: '#000000', r: 20, speed: 0.1, pixelMult: 100, energyMult: 100, mass: 10.0, restitution: 0.1,
+           voidGen: 0.001, tier: 5, special: 'reality_distortion', unlock: { prestige: 12, voidEssence: 10 } },
+    graviton: { name: 'Graviton Ball', color: '#a020f0', r: 8, speed: 2.0, pixelMult: 15, energyMult: 15, mass: 0.5, restitution: 1.8,
+               gravitonGen: 0.05, tier: 4, special: 'space_warp', unlock: { prestige: 10, spaceFabric: 100 } }
   };
 
   function createBall(type = 'basic'){
     const ballType = BallTypes[type];
     const s = (Math.random()*1.4 + 1.2) * ballType.speed;
     state.stats.ballsSpawned++;
-    return { 
+    const ball = { 
       x: cssW/2, y: cssH/2, 
       vx: randSign()*s, vy: randSign()*s, 
       r: ballType.r, 
@@ -518,9 +727,26 @@
       lastCollisionTime: Date.now(),
       collisionIntervals: [],
       vitality: 1.0, // 1.0 = full effectiveness, decreases over time
-      decayRate: 0.001, // Base decay rate per frame
-      maxVitality: 1.0
+      decayRate: ballType.tier >= 3 ? 0.0005 : 0.001, // Cosmic balls decay slower
+      maxVitality: 1.0,
+      // Cosmic ball special properties
+      special: ballType.special || null,
+      cosmicEnergy: 0,
+      isHoming: false,
+      homingTarget: null,
+      lastSpecialUse: 0,
+      // Reality distortion properties for high-tier balls
+      phaseThrough: ballType.tier >= 4,
+      gravitationalField: ballType.tier >= 3 ? ballType.r * 0.5 : 0,
+      quantumState: type === 'quantum' || ballType.tier >= 4 ? 'stable' : null
     };
+    
+    // Set initial cosmic energy for cosmic balls
+    if (ballType.tier >= 3) {
+      ball.cosmicEnergy = Math.random() * 100;
+    }
+    
+    return ball;
   }
   function can(cost){ return Object.entries(cost).every(([k,v]) => (state.resources[k]||0) >= v ); }
   function pay(cost){ for(const [k,v] of Object.entries(cost)) state.resources[k]-=v; }
@@ -945,6 +1171,20 @@
       document.getElementById('antimatterDisplay').textContent = state.resources.antimatter.toFixed(3);
       document.getElementById('antimatterRate').textContent = state.rates.antimatter > 0 ? ` (+${state.rates.antimatter.toFixed(3)}/s)` : '';
     }
+    
+    // Show cosmic resources when they exist
+    const cosmicResources = ['cosmicEnergy', 'darkEnergy', 'voidEssence', 'spaceFabric', 'lightYears', 
+                           'hydrogen', 'helium', 'darkMatterFuel', 'photonEnergy', 'gravitonWaves'];
+    cosmicResources.forEach(resource => {
+      if(state.resources[resource] > 0) {
+        document.getElementById(`${resource}Row`).style.display = 'block';
+        const precision = resource.includes('Essence') || resource.includes('spaceFabric') ? 3 : 
+                         resource.includes('Energy') ? 1 : 2;
+        document.getElementById(`${resource}Display`).textContent = state.resources[resource].toFixed(precision);
+        document.getElementById(`${resource}Rate`).textContent = state.rates[resource] > 0 ? 
+          ` (+${state.rates[resource].toFixed(precision)}/s)` : '';
+      }
+    });
     
     // Update prestige info
     if(state.prestige.unlocked){
@@ -1407,6 +1647,127 @@
         }
       }
     }
+    
+    // Update cosmic ball systems
+    updateCosmicBalls();
+    updateHomingBalls();
+    updateAgenticAI();
+  }
+  
+  // Cosmic ball special behavior system
+  function updateCosmicBalls() {
+    const currentTime = Date.now();
+    
+    state.balls.forEach(ball => {
+      const ballType = BallTypes[ball.type];
+      if (!ballType || ballType.tier < 3) return; // Only cosmic balls
+      
+      // Update cosmic energy for high-tier balls
+      if (ballType.tier >= 3) {
+        ball.cosmicEnergy = Math.min(1000, ball.cosmicEnergy + 0.5 * ballType.tier);
+      }
+      
+      // Special abilities based on ball type
+      switch (ball.type) {
+        case 'cosmic':
+          updateCosmicBallSpecial(ball, currentTime);
+          break;
+        case 'photon':
+          updatePhotonBallSpecial(ball);
+          break;
+        case 'darkMatter':
+          updateDarkMatterBallSpecial(ball);
+          break;
+        case 'void':
+          updateVoidBallSpecial(ball);
+          break;
+        case 'graviton':
+          updateGravitonBallSpecial(ball);
+          break;
+      }
+      
+      // Generate cosmic resources based on ball type
+      if (ballType.cosmicGen) state.resources.cosmicEnergy += ballType.cosmicGen * ball.vitality;
+      if (ballType.darkGen) state.resources.darkEnergy += ballType.darkGen * ball.vitality;
+      if (ballType.voidGen) state.resources.voidEssence += ballType.voidGen * ball.vitality;
+      if (ballType.gravitonGen) state.resources.gravitonWaves += ballType.gravitonGen * ball.vitality;
+    });
+  }
+  
+  function updateCosmicBallSpecial(ball, currentTime) {
+    // Gravitational pull - attracts other balls
+    if (ball.cosmicEnergy > 500) {
+      state.balls.forEach(otherBall => {
+        if (otherBall === ball) return;
+        const dx = ball.x - otherBall.x;
+        const dy = ball.y - otherBall.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        if (dist > 0 && dist < 100) {
+          const force = 0.1 * (ball.cosmicEnergy / 1000);
+          otherBall.vx += (dx / dist) * force;
+          otherBall.vy += (dy / dist) * force;
+        }
+      });
+    }
+  }
+  
+  function updatePhotonBallSpecial(ball) {
+    // Light speed - incredibly fast movement with light trail effects
+    const speedBoost = 1 + (ball.cosmicEnergy / 500);
+    ball.vx *= speedBoost;
+    ball.vy *= speedBoost;
+    
+    // Generate light years resource
+    state.resources.lightYears += 0.1 * ball.vitality;
+  }
+  
+  function updateDarkMatterBallSpecial(ball) {
+    // Phase through walls occasionally
+    if (Math.random() < 0.1 && ball.cosmicEnergy > 200) {
+      ball.phaseThrough = true;
+      setTimeout(() => ball.phaseThrough = false, 1000);
+    }
+    
+    // Generate dark matter fuel
+    if (ball.cosmicEnergy > 300) {
+      state.resources.darkMatterFuel += 0.05 * ball.vitality;
+    }
+  }
+  
+  function updateVoidBallSpecial(ball) {
+    // Reality distortion - can bend space-time
+    if (Math.random() < 0.05 && ball.cosmicEnergy > 800) {
+      state.stats.realityBends++;
+      
+      // Teleport to random location
+      ball.x = Math.random() * (cssW - 2*ball.r) + ball.r;
+      ball.y = Math.random() * (cssH - 2*ball.r) + ball.r;
+      
+      // Generate void essence
+      state.resources.voidEssence += 0.1;
+    }
+  }
+  
+  function updateGravitonBallSpecial(ball) {
+    // Space warp - creates localized gravitational fields
+    if (ball.cosmicEnergy > 400) {
+      state.balls.forEach(otherBall => {
+        if (otherBall === ball) return;
+        const dx = ball.x - otherBall.x;
+        const dy = ball.y - otherBall.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        if (dist > 0 && dist < 150) {
+          // Create space fabric distortion
+          const warpStrength = 0.05 * (ball.cosmicEnergy / 1000);
+          const angle = Math.atan2(dy, dx) + Math.PI/2; // Perpendicular force
+          otherBall.vx += Math.cos(angle) * warpStrength;
+          otherBall.vy += Math.sin(angle) * warpStrength;
+        }
+      });
+      
+      // Generate space fabric
+      state.resources.spaceFabric += 0.2 * ball.vitality;
+    }
   }
 
   function draw(){
@@ -1527,29 +1888,52 @@
     }
   }
 
-  // passive building production + automation
+  // passive building production + automation + fuel system
   let lastResources = {...state.resources};
   setInterval(()=>{ 
     const challengeEffects = state.activeChallenge ? Challenges[state.activeChallenge].effect() : {};
     const timeScale = state.mul.timeScale || 1;
     const passiveMult = challengeEffects.passiveMult || 1;
     
-    // Calculate rates before updating resources
-    for(const res of ['pixels','energy','science','quantum','antimatter']){
-      state.rates[res] = state.resources[res] - (lastResources[res] || 0);
-      lastResources[res] = state.resources[res];
+    // Calculate rates for all resources before updating
+    const allResources = ['pixels','energy','science','quantum','antimatter',
+                         'cosmicEnergy','darkEnergy','voidEssence','spaceFabric','lightYears',
+                         'hydrogen','helium','darkMatterFuel','photonEnergy','gravitonWaves'];
+    for(const res of allResources){
+      state.rates[res] = (state.resources[res] || 0) - (lastResources[res] || 0);
+      lastResources[res] = state.resources[res] || 0;
     }
     
+    // Building production with fuel consumption
     for(const b of Object.values(Buildings)){ 
       if(b.n>0){ 
-        for(const [k,v] of Object.entries(b.prod)) {
-          const gain = v*b.n*timeScale*passiveMult*state.efficiency.production;
-          state.resources[k]+=gain;
-          if(k==='pixels') state.stats.totalPixels += gain;
-          if(k==='energy') state.stats.totalEnergy += gain; 
-          if(k==='science') state.stats.totalScience += gain;
+        // Check fuel requirements
+        let canProduce = true;
+        if(b.fuel && b.fuelRate) {
+          const fuelNeeded = b.fuelRate * b.n * timeScale;
+          if((state.resources[b.fuel] || 0) >= fuelNeeded) {
+            state.resources[b.fuel] -= fuelNeeded;
+          } else {
+            canProduce = false; // Not enough fuel
+          }
+        }
+        
+        if(canProduce) {
+          for(const [k,v] of Object.entries(b.prod)) {
+            const gain = v*b.n*timeScale*passiveMult*state.efficiency.production;
+            state.resources[k] = (state.resources[k] || 0) + gain;
+            if(k==='pixels') state.stats.totalPixels += gain;
+            if(k==='energy') state.stats.totalEnergy += gain; 
+            if(k==='science') state.stats.totalScience += gain;
+          }
         }
       } 
+    }
+    
+    // Agentic building effects - AI optimization
+    if(Buildings.agenticOptimizer && Buildings.agenticOptimizer.n > 0) {
+      const optimizationBonus = Buildings.agenticOptimizer.effect();
+      state.efficiency.production += optimizationBonus * 0.01;
     } 
     
     // Auto-buy cheapest building if automation is on
@@ -1906,6 +2290,149 @@
     }
   }
 
+  // Interactive homing system - click on balls to make them home to nearest ball
+  function setupBallInteraction() {
+    canvas.addEventListener('click', handleBallClick);
+    canvas.addEventListener('touchend', handleBallClick);
+    
+    function handleBallClick(e) {
+      if (!state.interaction.homingUnlocked || state.interaction.homingCooldown > 0) return;
+      
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = cssW / rect.width;
+      const scaleY = cssH / rect.height;
+      const clickX = (e.clientX - rect.left) * scaleX || (e.changedTouches?.[0]?.clientX - rect.left) * scaleX;
+      const clickY = (e.clientY - rect.top) * scaleY || (e.changedTouches?.[0]?.clientY - rect.top) * scaleY;
+      
+      // Find clicked ball
+      const clickedBall = state.balls.find(ball => {
+        const dx = ball.x - clickX;
+        const dy = ball.y - clickY;
+        return Math.sqrt(dx*dx + dy*dy) <= ball.r + 10; // 10px tolerance
+      });
+      
+      if (!clickedBall || clickedBall.vitality < 0.2) return; // Need minimum vitality
+      
+      // Find nearest other ball
+      let nearestBall = null;
+      let nearestDist = Infinity;
+      
+      for (const ball of state.balls) {
+        if (ball === clickedBall) continue;
+        const dx = ball.x - clickedBall.x;
+        const dy = ball.y - clickedBall.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        if (dist < nearestDist) {
+          nearestDist = dist;
+          nearestBall = ball;
+        }
+      }
+      
+      if (!nearestBall) return;
+      
+      // Activate homing
+      clickedBall.isHoming = true;
+      clickedBall.homingTarget = nearestBall;
+      clickedBall.vitality -= 0.15; // Cost vitality to activate homing
+      
+      // Update stats and cooldown
+      state.stats.homingClicks++;
+      state.interaction.homingCooldown = 30; // 30 frames cooldown
+      
+      // Visual feedback
+      clickedBall.color = '#ffff00'; // Flash yellow
+      setTimeout(() => {
+        if (clickedBall.type in BallTypes) {
+          clickedBall.color = BallTypes[clickedBall.type].color;
+        }
+      }, 500);
+    }
+  }
+  
+  // Update homing behavior in physics
+  function updateHomingBalls() {
+    state.balls.forEach(ball => {
+      if (ball.isHoming && ball.homingTarget) {
+        const target = ball.homingTarget;
+        const dx = target.x - ball.x;
+        const dy = target.y - ball.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        
+        if (dist > 0) {
+          const homingStrength = 0.3 * ball.vitality; // Stronger when more vital
+          ball.vx += (dx / dist) * homingStrength;
+          ball.vy += (dy / dist) * homingStrength;
+        }
+        
+        // Stop homing after 3 seconds or if too close
+        if (Date.now() - ball.lastSpecialUse > 3000 || dist < ball.r + target.r + 5) {
+          ball.isHoming = false;
+          ball.homingTarget = null;
+        }
+      }
+    });
+    
+    // Reduce cooldown
+    if (state.interaction.homingCooldown > 0) {
+      state.interaction.homingCooldown--;
+    }
+  }
+
+  // Agentic AI system - automatically optimizes gameplay
+  function updateAgenticAI() {
+    if (!state.automation.agentic) return;
+    
+    // AI decides what to do based on current state
+    const actions = [];
+    
+    // Resource management
+    if (state.resources.pixels > state.resources.energy * 2) {
+      actions.push({ action: 'convert_pixels_to_energy', priority: 0.8 });
+    }
+    
+    // Ball optimization
+    if (state.balls.length > 0) {
+      const avgVitality = state.balls.reduce((sum, b) => sum + b.vitality, 0) / state.balls.length;
+      if (avgVitality < 0.5) {
+        actions.push({ action: 'vitality_boost', priority: 0.9 });
+      }
+    }
+    
+    // Cosmic resource prioritization
+    if (state.resources.cosmicEnergy > 100 && state.prestige.level >= 5) {
+      actions.push({ action: 'cosmic_optimization', priority: 0.7 });
+    }
+    
+    // Execute highest priority action
+    if (actions.length > 0) {
+      actions.sort((a, b) => b.priority - a.priority);
+      executeAgenticAction(actions[0]);
+      state.stats.agenticActions++;
+    }
+  }
+  
+  function executeAgenticAction(action) {
+    switch(action.action) {
+      case 'vitality_boost':
+        state.balls.forEach(ball => {
+          if (ball.vitality < 0.8) {
+            ball.vitality = Math.min(ball.maxVitality, ball.vitality + 0.05);
+          }
+        });
+        break;
+      case 'cosmic_optimization':
+        // AI learns to optimize cosmic resource generation
+        state.mul.cosmic = (state.mul.cosmic || 1) * 1.001;
+        break;
+      case 'convert_pixels_to_energy':
+        if (state.resources.pixels >= 100) {
+          state.resources.pixels -= 100;
+          state.resources.energy += 50;
+        }
+        break;
+    }
+  }
+
   // ---------- boot ----------
   function boot(){
     fitCanvas();
@@ -1915,6 +2442,7 @@
     updatePrestige();
     buildUpgrades(); buildBuildings(); buildResearch(); buildPrestige(); buildMilestones(); buildChallenges(); buildMetaUpgrades();
     refresh();
+    setupBallInteraction(); // Set up interactive homing system
     runTests();
     loop();
   }

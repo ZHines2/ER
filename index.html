@@ -21,8 +21,30 @@
     button:hover{border-color:var(--accent)}
     button.disabled{opacity:.5;cursor:not-allowed}
     #tests{font-size:12px;color:#9aa0a6;white-space:pre-wrap;margin-top:8px}
-    @media (max-width:720px){ .grid{grid-template-columns:1fr 1fr} button{width:100%;padding:12px 14px;font-size:16px} .title{font-size:16px} .section h2{font-size:12px} }
-    @media (max-width:480px){ .grid{grid-template-columns:1fr} }
+    /* Enhanced mobile compatibility */
+    @media (max-width:720px){ 
+      .grid{grid-template-columns:1fr 1fr} 
+      button{width:100%;padding:12px 14px;font-size:16px;min-height:44px} 
+      .title{font-size:16px} 
+      .section h2{font-size:12px} 
+      .section{padding:8px}
+      .wrap{padding:12px}
+      #gameCanvas{max-width:100%;height:auto}
+    }
+    @media (max-width:480px){ 
+      .grid{grid-template-columns:1fr} 
+      button{font-size:18px;min-height:48px;padding:14px 16px}
+      .section{padding:6px;margin-bottom:8px}
+      .wrap{padding:8px}
+      .progress-modal-content{padding:16px;width:95%}
+      .kv{flex-direction:column;gap:8px}
+    }
+    /* Touch-friendly enhancements */
+    @media (max-width:600px) {
+      .debug-toggle{bottom:20px;right:20px;font-size:18px;padding:12px 16px}
+      .progress-close{font-size:24px;padding:8px 12px}
+      .milestone,.challenge,.meta-upgrade{padding:8px;margin:4px 0;font-size:12px}
+    }
     .milestone{background:#1a1a1a;border-left:3px solid #4af;padding:4px 8px;margin:2px 0;font-size:11px}
     .milestone.completed{border-color:#4f4;color:#9f9}
     .prestige-button{border-color:#f4a !important;color:#f4a}
@@ -32,18 +54,18 @@
     .challenge.completed{border-color:#4f4;color:#9f9}
     .meta-upgrade{background:#1a1a2a;border-left:3px solid #44f;padding:4px 8px;margin:2px 0;font-size:11px}
     
-    /* Collision Effects - Enhanced */
+    /* Collision Effects - Enhanced with gentler shake */
     @keyframes screenShake {
       0%, 100% { transform: translate(0, 0); }
-      10% { transform: translate(-3px, 2px); }
-      20% { transform: translate(3px, -2px); }
-      30% { transform: translate(-2px, 3px); }
-      40% { transform: translate(2px, -1px); }
-      50% { transform: translate(-1px, 2px); }
-      60% { transform: translate(1px, -3px); }
-      70% { transform: translate(-2px, 1px); }
-      80% { transform: translate(2px, -2px); }
-      90% { transform: translate(-1px, 1px); }
+      10% { transform: translate(-1px, 1px); }
+      20% { transform: translate(1px, -1px); }
+      30% { transform: translate(-1px, 1px); }
+      40% { transform: translate(1px, -0.5px); }
+      50% { transform: translate(-0.5px, 1px); }
+      60% { transform: translate(0.5px, -1px); }
+      70% { transform: translate(-1px, 0.5px); }
+      80% { transform: translate(1px, -1px); }
+      90% { transform: translate(-0.5px, 0.5px); }
     }
     @keyframes collision-flash {
       0% { background: var(--panel); }
@@ -246,6 +268,7 @@
         </div>
         <div style="margin-top:8px;">
           <button onclick="openProgressModal()" style="font-size:12px;padding:4px 8px;">view progress</button>
+          <button onclick="fullReset()" style="font-size:12px;padding:4px 8px;margin-left:8px;color:#f44;border-color:#f44;" title="Complete game reset">reset game</button>
         </div>
         <div id="prestigeInfo" class="mono" style="display:none;margin-top:8px;color:#f4a">
           prestige lvl: <span id="prestigeLevel">0</span> | points: <span id="prestigePoints">0</span>
@@ -374,7 +397,8 @@
     decay:{
       globalDecayRate:1.0, // Global multiplier for all decay rates
       vitalityRecoveryRate:0.0, // Rate at which vitality recovers per collision
-      decayEnabled:true // Whether decay system is active
+      decayEnabled:true, // Whether decay system is active
+      showDecayUI:false // Whether to show detailed decay status (starts hidden)
     }
   };
 
@@ -430,7 +454,8 @@
     // Ball vitality and decay upgrades
     vitalBoost: { name:'vitality boost', cost:{energy:300,science:25}, run(){ state.balls.forEach(b => b.vitality = Math.min(b.maxVitality, b.vitality + 0.2)); this.cost.energy*=1.8; this.cost.science*=1.5; }, visible:()=>state.stats.wallHits>=500},
     decayResistance: { name:'decay resistance', cost:{science:150,pixels:800}, run(){ state.decay.globalDecayRate *= 0.75; this.cost.science*=2; this.cost.pixels*=2; }, visible:()=>state.stats.wallHits>=1000},
-    collisionRecovery: { name:'collision recovery', cost:{science:400,energy:1200}, run(){ state.decay.vitalityRecoveryRate += 0.02; this.cost.science*=2.5; this.cost.energy*=2; }, visible:()=>state.stats.wallHits>=2000}
+    collisionRecovery: { name:'collision recovery', cost:{science:400,energy:1200}, run(){ state.decay.vitalityRecoveryRate += 0.02; this.cost.science*=2.5; this.cost.energy*=2; }, visible:()=>state.stats.wallHits>=2000},
+    decayMonitor: { name:'decay monitor', cost:{science:100,pixels:500}, run(){ state.decay.showDecayUI = true; delete Upgrades.decayMonitor; buildUpgrades(); }, visible:()=>state.stats.wallHits>=300 && !state.decay.showDecayUI}
   };
 
   // Buildings: provide continuous passive resource generation
@@ -555,10 +580,10 @@
 
   // ---------- ball types & creation ----------
   const BallTypes = {
-    basic: { name: 'Basic Ball', color: '#e6e6e6', r: 8, speed: 1, pixelMult: 1, energyMult: 1 },
-    energy: { name: 'Energy Ball', color: '#4af', r: 10, speed: 0.8, pixelMult: 0.5, energyMult: 3 },
-    quantum: { name: 'Quantum Ball', color: '#f4a', r: 6, speed: 1.5, pixelMult: 2, energyMult: 0.8, quantumGen: 0.1 },
-    antimatter: { name: 'Antimatter Ball', color: '#fa4', r: 12, speed: 0.6, pixelMult: 5, energyMult: 5, antimatterGen: 0.05 }
+    basic: { name: 'Basic Ball', color: '#e6e6e6', r: 8, speed: 1, pixelMult: 1, energyMult: 1, mass: 1.0, restitution: 0.8 },
+    energy: { name: 'Energy Ball', color: '#4af', r: 10, speed: 0.8, pixelMult: 0.5, energyMult: 3, mass: 1.5, restitution: 0.9, quantumGen: 0.05 },
+    quantum: { name: 'Quantum Ball', color: '#f4a', r: 6, speed: 1.5, pixelMult: 2, energyMult: 0.8, mass: 0.6, restitution: 1.2, quantumGen: 0.1 },
+    antimatter: { name: 'Antimatter Ball', color: '#fa4', r: 12, speed: 0.6, pixelMult: 5, energyMult: 5, mass: 2.5, restitution: 0.6, antimatterGen: 0.05 }
   };
 
   function createBall(type = 'basic'){
@@ -569,6 +594,8 @@
       x: cssW/2, y: cssH/2, 
       vx: randSign()*s, vy: randSign()*s, 
       r: ballType.r, 
+      mass: ballType.mass || 1.0,
+      restitution: ballType.restitution || 0.8,
       type: type,
       color: ballType.color,
       age: 0,
@@ -915,8 +942,10 @@
     canvas.classList.add('collision-effect');
     setTimeout(() => canvas.classList.remove('collision-effect'), 300);
     
-    // Add screen shake more frequently for better feedback
-    if (Math.random() < 0.4) {
+    // Gentle screen shake - reduced frequency for calmer atmosphere
+    // Only trigger on significant impacts and reduce early game spam
+    const impactThreshold = Math.max(0.15, 0.4 - (state.stats.wallHits / 1000)); // Reduces from 40% to 15% over time
+    if (Math.random() < impactThreshold && state.stats.wallHits > 5) { // Wait for a few impacts before starting
       document.body.classList.add('screen-shake');
       setTimeout(() => document.body.classList.remove('screen-shake'), 400);
     }
@@ -1004,18 +1033,28 @@
     html += `<div class="progress-item"><span>Balls Spawned</span><span>${state.stats.ballsSpawned}</span></div>`;
     html += `<div class="progress-item"><span>Active Balls</span><span>${state.balls.length}</span></div>`;
     
-    // Ball vitality and decay statistics
+    // Ball health statistics (simplified)
     if(state.balls.length > 0) {
       const avgVitality = state.balls.reduce((sum, b) => sum + (b.vitality || 1), 0) / state.balls.length;
-      const totalCollisions = state.balls.reduce((sum, b) => sum + (b.collisions || 0), 0);
-      html += `<div class="progress-item"><span>Avg Ball Vitality</span><span>${(avgVitality * 100).toFixed(1)}%</span></div>`;
-      html += `<div class="progress-item"><span>Ball Collisions</span><span>${totalCollisions.toLocaleString()}</span></div>`;
       
-      if(state.decay.decayEnabled) {
-        html += `<div class="progress-item"><span>Decay Rate</span><span>${(state.decay.globalDecayRate * 100).toFixed(1)}%</span></div>`;
-        html += `<div class="progress-item"><span>Recovery Rate</span><span>${(state.decay.vitalityRecoveryRate * 100).toFixed(1)}%</span></div>`;
-      } else {
-        html += `<div class="progress-item"><span>Decay Status</span><span>Nullified</span></div>`;
+      // Only show vitality if balls are actually decaying
+      if(avgVitality < 0.9) {
+        html += `<div class="progress-item"><span>Ball Health</span><span>${(avgVitality * 100).toFixed(0)}%</span></div>`;
+      }
+      
+      // Show detailed decay status only if decay monitor upgrade is purchased
+      if(state.decay.showDecayUI) {
+        if(state.decay.decayEnabled) {
+          if(state.decay.globalDecayRate > 1.0) {
+            html += `<div class="progress-item"><span>Decay</span><span>High</span></div>`;
+          } else if(state.decay.globalDecayRate > 0.5) {
+            html += `<div class="progress-item"><span>Decay</span><span>Normal</span></div>`;
+          } else if(state.decay.globalDecayRate > 0) {
+            html += `<div class="progress-item"><span>Decay</span><span>Reduced</span></div>`;
+          }
+        } else {
+          html += `<div class="progress-item"><span>Decay</span><span>Disabled</span></div>`;
+        }
       }
     }
     
@@ -1057,24 +1096,14 @@
       state.balls = state.balls.slice(0, maxBalls);
     }
     
-    // Process each ball and handle decay/death
+    // Process each ball and handle age tracking
     for(let i = state.balls.length - 1; i >= 0; i--) {
       const b = state.balls[i];
       const ballType = BallTypes[b.type] || BallTypes.basic;
       b.age++;
       
-      // Apply decay system if enabled
-      if(state.decay.decayEnabled && currentDecayRate > 0) {
-        const actualDecayRate = b.decayRate * currentDecayRate;
-        b.vitality = Math.max(0.0, b.vitality - actualDecayRate); // Allow balls to reach 0 vitality
-        
-        // Check if ball should "die" from decay
-        if(b.vitality <= 0.0) {
-          state.stats.ballsLost++;
-          state.balls.splice(i, 1); // Remove the ball
-          continue; // Skip to next ball
-        }
-      }
+      // Note: Decay now only happens on ball-to-ball collisions, not over time
+      // This allows single balls to persist indefinitely
       
       const baseSpeed = ballType.speed * ballSpeedMult;
       if(!Number.isFinite(b.vx)||Math.abs(b.vx)<.05) b.vx=randSign()*1.2*baseSpeed;
@@ -1163,17 +1192,20 @@
         // Trigger collision effect
         triggerCollisionEffect();
         
+        // Apply early game ramp-up multiplier to prevent excessive initial resources
+        const earlyGameRampUp = Math.min(1.0, Math.max(0.05, state.stats.wallHits / 20.0)); // Ramps from 5% to 100% over first 20 wall hits
+        
         if(hitV&&hitH){ 
-          const pGain = 2*ballType.pixelMult*state.mul.pixel*totalResourceMult;
-          const eGain = 1*ballType.energyMult*state.mul.energy*totalResourceMult;
+          const pGain = 2*ballType.pixelMult*state.mul.pixel*totalResourceMult*earlyGameRampUp;
+          const eGain = 1*ballType.energyMult*state.mul.energy*totalResourceMult*earlyGameRampUp;
           state.resources.pixels += pGain; 
           state.resources.energy += eGain;
           state.stats.totalPixels += pGain;
           state.stats.totalEnergy += eGain;
         }
         else if(hitV||hitH){ 
-          const pGain = 1*ballType.pixelMult*state.mul.pixel*totalResourceMult;
-          const eGain = .5*ballType.energyMult*state.mul.energy*totalResourceMult;
+          const pGain = 1*ballType.pixelMult*state.mul.pixel*totalResourceMult*earlyGameRampUp;
+          const eGain = .5*ballType.energyMult*state.mul.energy*totalResourceMult*earlyGameRampUp;
           state.resources.pixels += pGain; 
           state.resources.energy += eGain;
           state.stats.totalPixels += pGain;
@@ -1201,7 +1233,7 @@
         const minDistance = b1.r + b2.r;
         
         if(distance < minDistance && distance > 0){
-          // Collision detected - calculate elastic collision response
+          // Collision detected - calculate physics-based elastic collision response
           const nx = dx / distance;
           const ny = dy / distance;
           
@@ -1214,6 +1246,11 @@
           b2.x += separateX;
           b2.y += separateY;
           
+          // Get ball masses and restitution
+          const m1 = b1.mass || 1.0;
+          const m2 = b2.mass || 1.0;
+          const restitution = Math.sqrt((b1.restitution || 0.8) * (b2.restitution || 0.8)); // Combined restitution
+          
           // Calculate relative velocity in collision normal direction
           const dvx = b2.vx - b1.vx;
           const dvy = b2.vy - b1.vy;
@@ -1222,24 +1259,70 @@
           // Do not resolve if velocities are separating
           if(dvn <= 0) continue;
           
-          // Calculate collision impulse (assuming equal mass)
-          const impulse = dvn;
+          // Calculate collision impulse using proper momentum conservation
+          // Formula: J = (1 + e) * v_rel_n / (1/m1 + 1/m2)
+          const impulse = (1 + restitution) * dvn / (1/m1 + 1/m2);
           
-          // Update velocities
-          b1.vx += impulse * nx;
-          b1.vy += impulse * ny;
-          b2.vx -= impulse * nx;
-          b2.vy -= impulse * ny;
+          // Update velocities based on momentum conservation
+          const impulse1 = impulse / m1;
+          const impulse2 = impulse / m2;
           
-          // Collision bonus - different ball types create special effects
+          b1.vx += impulse1 * nx;
+          b1.vy += impulse1 * ny;
+          b2.vx -= impulse2 * nx;
+          b2.vy -= impulse2 * ny;
+          
+          // Calculate collision energy for gameplay effects
+          const collisionEnergy = 0.5 * (m1 * (b1.vx*b1.vx + b1.vy*b1.vy) + m2 * (b2.vx*b2.vx + b2.vy*b2.vy));
+          const energyIntensity = Math.min(1.0, collisionEnergy / 100); // Normalize collision intensity
+          
+          // Track collision statistics
+          b1.collisions++;
+          b2.collisions++;
+          b1.lastCollisionTime = Date.now();
+          b2.lastCollisionTime = Date.now();
+          
+          // Apply decay on collision with velocity-dependent effects
+          if(state.decay.decayEnabled && currentDecayRate > 0) {
+            const baseDecayRate = currentDecayRate * 0.05;
+            // Higher velocity collisions cause more decay
+            const velocityDecayMultiplier = 1 + (energyIntensity * 0.5);
+            const actualDecayRate = baseDecayRate * velocityDecayMultiplier;
+            
+            b1.vitality = Math.max(0.1, b1.vitality - (b1.decayRate * actualDecayRate));
+            b2.vitality = Math.max(0.1, b2.vitality - (b2.decayRate * actualDecayRate));
+            
+            // Apply vitality recovery if available (less effective at high energies)
+            if(state.decay.vitalityRecoveryRate > 0) {
+              const recoveryMultiplier = Math.max(0.1, 1 - (energyIntensity * 0.3));
+              const recovery = state.decay.vitalityRecoveryRate * recoveryMultiplier;
+              b1.vitality = Math.min(b1.maxVitality, b1.vitality + recovery);
+              b2.vitality = Math.min(b2.maxVitality, b2.vitality + recovery);
+            }
+          }
+          
+          // Enhanced collision bonus based on ball characteristics and energy
           if(b1.type !== b2.type){
-            const scienceGain = 0.5 * (state.mul.science || 1) * resourceMult;
+            // Different ball types create more science based on mass difference and collision energy
+            const massRatio = Math.abs(m1 - m2) / Math.max(m1, m2);
+            const scienceMultiplier = 1 + massRatio + (energyIntensity * 0.5);
+            const scienceGain = 0.5 * (state.mul.science || 1) * resourceMult * scienceMultiplier;
             state.resources.science += scienceGain;
             state.stats.totalScience += scienceGain;
-            // Trigger collision effect for ball-to-ball collisions too
-            if(Math.random() < 0.5) triggerCollisionEffect();
+            
+            // Higher energy collisions trigger more visual effects
+            if(Math.random() < (0.5 + energyIntensity * 0.3)) triggerCollisionEffect();
           }
         }
+      }
+    }
+    
+    // Check for balls that should die from decay (only after collisions)
+    for(let i = state.balls.length - 1; i >= 0; i--) {
+      const b = state.balls[i];
+      if(b.vitality <= 0.1) { // Minimum vitality threshold
+        state.stats.ballsLost++;
+        state.balls.splice(i, 1);
       }
     }
     
@@ -1334,32 +1417,21 @@
       
       ctx.restore();
       
-      // Vitality ring indicator (enhanced)
-      if(vitality < 1.0 && state.decay.decayEnabled) {
+      // Vitality ring indicator (simplified and more discrete)
+      if(vitality < 0.9 && state.decay.decayEnabled) {
         ctx.save();
-        // Color coding: green > yellow > orange > red as vitality decreases
-        let ringColor = '#4af'; // Blue for healthy
-        if(vitality < 0.8) ringColor = '#4f4'; // Green
-        if(vitality < 0.6) ringColor = '#ff4'; // Yellow
-        if(vitality < 0.4) ringColor = '#f84'; // Orange  
-        if(vitality < 0.2) ringColor = '#f44'; // Red
+        // Simple color coding: green > yellow > red
+        let ringColor = '#4f4'; // Green for healthy
+        if(vitality < 0.5) ringColor = '#ff4'; // Yellow for damaged
+        if(vitality < 0.2) ringColor = '#f44'; // Red for critical
         
         ctx.strokeStyle = ringColor;
-        ctx.lineWidth = Math.max(2, 4 * (1 - vitality)); // Thicker ring as vitality decreases
-        ctx.globalAlpha = 0.8;
+        ctx.lineWidth = 2;
+        ctx.globalAlpha = 0.6;
         ctx.beginPath();
-        ctx.arc(b.x, b.y, b.r + 3, 0, Math.PI * 2 * vitality);
+        // Simple arc showing remaining vitality
+        ctx.arc(b.x, b.y, b.r + 2, 0, Math.PI * 2 * vitality);
         ctx.stroke();
-        
-        // Add pulsing effect for critically low vitality
-        if(vitality < 0.2) {
-          ctx.globalAlpha = 0.3 + 0.3 * Math.sin(Date.now() * 0.01);
-          ctx.strokeStyle = '#fff';
-          ctx.lineWidth = 1;
-          ctx.beginPath();
-          ctx.arc(b.x, b.y, b.r + 5, 0, Math.PI * 2);
-          ctx.stroke();
-        }
         ctx.restore();
       }
       
@@ -1553,6 +1625,8 @@
               vx: Math.max(-50, Math.min(ball.vx, 50)), // Clamp velocity
               vy: Math.max(-50, Math.min(ball.vy, 50)),
               r: ballType.r,
+              mass: ballType.mass || 1.0,
+              restitution: ballType.restitution || 0.8,
               type: ball.type,
               color: ballType.color,
               age: Math.max(0, ball.age || 0),
@@ -1583,6 +1657,9 @@
         }
         if(typeof d.decay.decayEnabled === 'boolean') {
           state.decay.decayEnabled = d.decay.decayEnabled;
+        }
+        if(typeof d.decay.showDecayUI === 'boolean') {
+          state.decay.showDecayUI = d.decay.showDecayUI;
         }
       }
       
@@ -1690,6 +1767,21 @@
   function debugResetGame() {
     if(confirm('Reset game state?')) {
       localStorage.removeItem('tty_idle_save');
+      location.reload();
+    }
+  }
+  
+  // Full reset function for players - more accessible
+  function fullReset() {
+    if(confirm('This will completely reset your game progress. Are you sure?')) {
+      localStorage.removeItem('tty_idle_save');
+      // Reset state immediately to prevent resource accumulation during reload
+      state.resources = {pixels:0,energy:0,science:0,quantum:0,antimatter:0};
+      state.balls = [];
+      state.stats = {totalPixels:0,totalEnergy:0,totalScience:0,ballsSpawned:0,wallHits:0,ballsLost:0};
+      state.prestige = {level:0,points:0,unlocks:{}};
+      state.milestones = {};
+      state.decay = {globalDecayRate:1.0,vitalityRecoveryRate:0.0,decayEnabled:true,showDecayUI:false};
       location.reload();
     }
   }

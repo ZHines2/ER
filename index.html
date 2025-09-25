@@ -369,7 +369,7 @@
     offlineTime:0,
     lastSave:Date.now(),
     rates:{pixels:0,energy:0,science:0,quantum:0,antimatter:0},
-    stats:{totalPixels:0,totalEnergy:0,totalScience:0,ballsSpawned:1,wallHits:0},
+    stats:{totalPixels:0,totalEnergy:0,totalScience:0,ballsSpawned:1,wallHits:0,ballsLost:0},
     // New decay system properties
     decay:{
       globalDecayRate:1.0, // Global multiplier for all decay rates
@@ -492,7 +492,8 @@
     thousand: { name:'Pixel Collector', desc:'Generate 1000 pixels', threshold:1000, stat:'totalPixels', reward:'+10% pixel generation', completed:false },
     tenK: { name:'Energy Master', desc:'Generate 10K energy', threshold:10000, stat:'totalEnergy', reward:'Unlock energy multiplier', completed:false },
     ballMaster: { name:'Ball Spawner', desc:'Spawn 50 balls', threshold:50, stat:'ballsSpawned', reward:'Balls start 20% faster', completed:false },
-    scienceFirst: { name:'Researcher', desc:'Generate 100 science', threshold:100, stat:'totalScience', reward:'Lab efficiency +50%', completed:false }
+    scienceFirst: { name:'Researcher', desc:'Generate 100 science', threshold:100, stat:'totalScience', reward:'Lab efficiency +50%', completed:false },
+    survivor: { name:'Survivor', desc:'Lose 10 balls to decay', threshold:10, stat:'ballsLost', reward:'Emergency ball spawn when no balls remain', completed:false }
   };
 
   const Challenges = {
@@ -634,6 +635,7 @@
       case 'thousand': state.mul.pixel *= 1.1; break;
       case 'ballMaster': state.balls.forEach(b => { b.vx *= 1.2; b.vy *= 1.2; }); break;
       case 'scienceFirst': state.mul.science = (state.mul.science || 1) * 1.5; break;
+      case 'survivor': /* Emergency spawn system enabled */ break;
     }
   }
 
@@ -1017,6 +1019,13 @@
       }
     }
     
+    // Ball death statistics
+    if(state.stats.ballsLost > 0) {
+      html += `<div class="progress-item"><span>Balls Lost</span><span>${state.stats.ballsLost.toLocaleString()}</span></div>`;
+      const survivalRate = state.stats.ballsSpawned > 0 ? ((state.stats.ballsSpawned - state.stats.ballsLost) / state.stats.ballsSpawned * 100) : 100;
+      html += `<div class="progress-item"><span>Survival Rate</span><span>${survivalRate.toFixed(1)}%</span></div>`;
+    }
+    
     if(state.challengesCompleted && Object.keys(state.challengesCompleted).length > 0) {
       const completed = Object.keys(state.challengesCompleted).filter(k => state.challengesCompleted[k]).length;
       html += `<div class="progress-item"><span>Challenges Completed</span><span>${completed}</span></div>`;
@@ -1048,14 +1057,23 @@
       state.balls = state.balls.slice(0, maxBalls);
     }
     
-    for(const b of state.balls){
+    // Process each ball and handle decay/death
+    for(let i = state.balls.length - 1; i >= 0; i--) {
+      const b = state.balls[i];
       const ballType = BallTypes[b.type] || BallTypes.basic;
       b.age++;
       
       // Apply decay system if enabled
       if(state.decay.decayEnabled && currentDecayRate > 0) {
         const actualDecayRate = b.decayRate * currentDecayRate;
-        b.vitality = Math.max(0.1, b.vitality - actualDecayRate); // Minimum 10% effectiveness
+        b.vitality = Math.max(0.0, b.vitality - actualDecayRate); // Allow balls to reach 0 vitality
+        
+        // Check if ball should "die" from decay
+        if(b.vitality <= 0.0) {
+          state.stats.ballsLost++;
+          state.balls.splice(i, 1); // Remove the ball
+          continue; // Skip to next ball
+        }
       }
       
       const baseSpeed = ballType.speed * ballSpeedMult;
@@ -1224,6 +1242,21 @@
         }
       }
     }
+    
+    // Emergency ball spawning system - prevent complete extinction
+    if(state.balls.length === 0) {
+      if(Milestones.survivor && Milestones.survivor.completed) {
+        // Spawn emergency ball if survivor milestone is completed
+        state.balls.push(createBall());
+        console.log('Emergency ball spawned due to extinction!');
+      } else {
+        // Spawn emergency ball but only if the player had balls before
+        if(state.stats.ballsSpawned > 1) {
+          state.balls.push(createBall());
+          console.log('Emergency ball spawned to prevent game over!');
+        }
+      }
+    }
   }
 
   function draw(){
@@ -1243,35 +1276,99 @@
       ctx.restore();
     }
     
-    // Draw balls with their specific colors and vitality indicators
+    // Draw balls with enhanced visual decay indicators
     for(const b of state.balls){ 
-      // Main ball body with vitality-based opacity
-      ctx.save();
-      ctx.globalAlpha = Math.max(0.4, b.vitality || 1.0); // Fade based on vitality
-      ctx.beginPath(); 
-      ctx.arc(b.x,b.y,b.r,0,Math.PI*2); 
-      ctx.fillStyle = b.color || '#e6e6e6'; 
-      ctx.fill(); 
-      ctx.restore();
+      const ballType = BallTypes[b.type] || BallTypes.basic;
+      const vitality = b.vitality || 1.0;
       
-      // Vitality ring indicator (shows health)
-      if(b.vitality < 1.0 && state.decay.decayEnabled) {
+      // Enhanced visual decay effects based on vitality level
+      ctx.save();
+      
+      // Ball opacity and color shift based on vitality
+      const baseOpacity = Math.max(0.3, vitality);
+      ctx.globalAlpha = baseOpacity;
+      
+      // Color shifting for decay - balls become darker/redder as they decay
+      let ballColor = b.color || '#e6e6e6';
+      if(vitality < 0.8 && state.decay.decayEnabled) {
+        // Mix the original color with red/brown based on decay level
+        const decayIntensity = (0.8 - vitality) / 0.8; // 0 = healthy, 1 = very decayed
+        const r = 150 + Math.floor(decayIntensity * 100); // Redder
+        const g = Math.floor(150 * (1 - decayIntensity * 0.7)); // Less green
+        const b_color = Math.floor(150 * (1 - decayIntensity * 0.7)); // Less blue
+        ballColor = `rgb(${r},${g},${b_color})`;
+      }
+      
+      ctx.beginPath(); 
+      ctx.arc(b.x, b.y, b.r, 0, Math.PI*2); 
+      ctx.fillStyle = ballColor;
+      ctx.fill(); 
+      
+      // Add decay texture/pattern for very decayed balls
+      if(vitality < 0.5 && state.decay.decayEnabled) {
         ctx.save();
-        ctx.strokeStyle = b.vitality > 0.5 ? '#4af' : '#f44'; // Blue if healthy, red if low
-        ctx.lineWidth = 2;
-        ctx.globalAlpha = 0.7;
-        ctx.beginPath();
-        ctx.arc(b.x, b.y, b.r + 3, 0, Math.PI * 2 * b.vitality);
-        ctx.stroke();
+        ctx.globalAlpha = (0.5 - vitality) * 2; // 0 to 1 as vitality goes from 0.5 to 0
+        ctx.strokeStyle = '#800000'; // Dark red
+        ctx.lineWidth = 1;
+        
+        // Draw crack-like patterns
+        const numCracks = Math.floor((0.5 - vitality) * 8) + 2;
+        for(let crack = 0; crack < numCracks; crack++) {
+          const angle = (crack / numCracks) * Math.PI * 2 + b.age * 0.001;
+          const startRadius = b.r * 0.3;
+          const endRadius = b.r * 0.9;
+          
+          ctx.beginPath();
+          ctx.moveTo(
+            b.x + Math.cos(angle) * startRadius, 
+            b.y + Math.sin(angle) * startRadius
+          );
+          ctx.lineTo(
+            b.x + Math.cos(angle) * endRadius, 
+            b.y + Math.sin(angle) * endRadius
+          );
+          ctx.stroke();
+        }
         ctx.restore();
       }
       
-      // Add glow effect for special balls
+      ctx.restore();
+      
+      // Vitality ring indicator (enhanced)
+      if(vitality < 1.0 && state.decay.decayEnabled) {
+        ctx.save();
+        // Color coding: green > yellow > orange > red as vitality decreases
+        let ringColor = '#4af'; // Blue for healthy
+        if(vitality < 0.8) ringColor = '#4f4'; // Green
+        if(vitality < 0.6) ringColor = '#ff4'; // Yellow
+        if(vitality < 0.4) ringColor = '#f84'; // Orange  
+        if(vitality < 0.2) ringColor = '#f44'; // Red
+        
+        ctx.strokeStyle = ringColor;
+        ctx.lineWidth = Math.max(2, 4 * (1 - vitality)); // Thicker ring as vitality decreases
+        ctx.globalAlpha = 0.8;
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.r + 3, 0, Math.PI * 2 * vitality);
+        ctx.stroke();
+        
+        // Add pulsing effect for critically low vitality
+        if(vitality < 0.2) {
+          ctx.globalAlpha = 0.3 + 0.3 * Math.sin(Date.now() * 0.01);
+          ctx.strokeStyle = '#fff';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.arc(b.x, b.y, b.r + 5, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+      
+      // Add glow effect for special balls (diminished by decay)
       if(b.type !== 'basic') {
         ctx.save();
-        ctx.globalAlpha = 0.3 * (b.vitality || 1.0); // Glow affected by vitality
+        ctx.globalAlpha = 0.3 * vitality; // Glow affected by vitality
         ctx.beginPath();
-        ctx.arc(b.x,b.y,b.r+2,0,Math.PI*2);
+        ctx.arc(b.x, b.y, b.r + 2, 0, Math.PI*2);
         ctx.fillStyle = b.color;
         ctx.fill();
         ctx.restore();
@@ -1280,11 +1377,11 @@
       // Challenge mode indicators
       if(state.activeChallenge && state.activeChallenge === 'slowBalls'){
         ctx.save();
-        ctx.globalAlpha = 0.5;
+        ctx.globalAlpha = 0.5 * vitality;
         ctx.strokeStyle = '#4af';
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.arc(b.x,b.y,b.r+4,0,Math.PI*2);
+        ctx.arc(b.x, b.y, b.r + 4, 0, Math.PI*2);
         ctx.stroke();
         ctx.restore();
       }

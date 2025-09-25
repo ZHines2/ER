@@ -369,7 +369,13 @@
     offlineTime:0,
     lastSave:Date.now(),
     rates:{pixels:0,energy:0,science:0,quantum:0,antimatter:0},
-    stats:{totalPixels:0,totalEnergy:0,totalScience:0,ballsSpawned:1,wallHits:0}
+    stats:{totalPixels:0,totalEnergy:0,totalScience:0,ballsSpawned:1,wallHits:0,ballsLost:0},
+    // New decay system properties
+    decay:{
+      globalDecayRate:1.0, // Global multiplier for all decay rates
+      vitalityRecoveryRate:0.0, // Rate at which vitality recovers per collision
+      decayEnabled:true // Whether decay system is active
+    }
   };
 
   function randSign(){ return Math.random()>.5?1:-1 }
@@ -398,56 +404,87 @@
   window.addEventListener('resize', fitCanvas, {passive:true});
 
   // ---------- data defs ----------
+  // Upgrades: one-time purchases that provide permanent benefits
   const Upgrades = {
+    // Basic upgrades for early game progression
     speed:  { name:'speed++',   cost:{pixels:12}, run(){ state.balls.forEach(b=>{b.vx*=1.15; b.vy*=1.15;}); this.cost.pixels=Math.ceil(this.cost.pixels*1.35);} },
     extra:  { name:'spawn ball',cost:{pixels:40}, run(){ state.balls.push(createBall()); this.cost.pixels=Math.ceil(this.cost.pixels*1.6);} },
     pMult:  { name:'pixel x2',  cost:{energy:60}, run(){ state.mul.pixel*=2; this.cost.energy=Math.ceil(this.cost.energy*3);} },
     eMult:  { name:'energy x2', cost:{pixels:70}, run(){ state.mul.energy*=2; this.cost.pixels=Math.ceil(this.cost.pixels*3);} },
     
-    // Bits and bobs - intermediate upgrades
+    // Mid-game efficiency upgrades - provide smaller but stackable bonuses
     ballGrip: { name:'ball-grip', cost:{pixels:150,energy:80}, run(){ state.mul.ballGrip=1.2; this.cost.pixels*=2; this.cost.energy*=1.8; }},
     efficiency: { name:'efficiency++', cost:{energy:120,science:5}, run(){ state.mul.efficiency=(state.mul.efficiency||1)*1.15; this.cost.energy*=2; this.cost.science*=2; }},
     resonance: { name:'resonance', cost:{science:25,pixels:300}, run(){ state.mul.resonance=1.25; this.cost.science*=3; this.cost.pixels*=2; }},
     catalyst: { name:'catalyst', cost:{energy:200,science:15}, run(){ state.mul.catalyst=1.3; this.cost.energy*=2.5; this.cost.science*=2; }},
     harmonic: { name:'harmonic-sync', cost:{pixels:400,energy:150,science:30}, run(){ state.mul.harmonic=1.4; this.cost.pixels*=3; this.cost.energy*=2; this.cost.science*=2; }},
     
+    // Special ball unlocks - require significant progress to unlock
     sBall:  { name:'energy ball', cost:{energy:500,science:50}, run(){ state.ballTypes.push('energy'); state.balls.push(createBall('energy')); this.cost.energy*=2; this.cost.science*=1.5; }, visible:()=>state.stats.totalScience>=100&&state.stats.totalEnergy>=5000},
     qBall:  { name:'quantum ball', cost:{science:1500,energy:2000}, run(){ state.ballTypes.push('quantum'); state.balls.push(createBall('quantum')); this.cost.science*=3; this.cost.energy*=2; }, visible:()=>state.stats.totalScience>=500&&state.stats.totalPixels>=25000&&state.prestige.level>=1},
+    
+    // Automation upgrades - remove manual clicking requirements
     autoClick: { name:'auto-click', cost:{pixels:1000,energy:500}, run(){ state.automation.autoClick=true; delete Upgrades.autoClick; buildUpgrades(); }},
-    autoBuy:   { name:'auto-buy', cost:{science:100,energy:800}, run(){ state.automation.autoBuy=true; delete Upgrades.autoBuy; buildUpgrades(); }, visible:()=>state.stats.totalScience>=200}
+    autoBuy:   { name:'auto-buy', cost:{science:100,energy:800}, run(){ state.automation.autoBuy=true; delete Upgrades.autoBuy; buildUpgrades(); }, visible:()=>state.stats.totalScience>=200},
+    
+    // Ball vitality and decay upgrades
+    vitalBoost: { name:'vitality boost', cost:{energy:300,science:25}, run(){ state.balls.forEach(b => b.vitality = Math.min(b.maxVitality, b.vitality + 0.2)); this.cost.energy*=1.8; this.cost.science*=1.5; }, visible:()=>state.stats.wallHits>=500},
+    decayResistance: { name:'decay resistance', cost:{science:150,pixels:800}, run(){ state.decay.globalDecayRate *= 0.75; this.cost.science*=2; this.cost.pixels*=2; }, visible:()=>state.stats.wallHits>=1000},
+    collisionRecovery: { name:'collision recovery', cost:{science:400,energy:1200}, run(){ state.decay.vitalityRecoveryRate += 0.02; this.cost.science*=2.5; this.cost.energy*=2; }, visible:()=>state.stats.wallHits>=2000}
   };
 
+  // Buildings: provide continuous passive resource generation
   const Buildings = {
+    // Tier 1: Basic buildings available from game start
     pgen: { name:'pixel-gen', cost:{energy:25}, prod:{pixels:.15}, n:0, tier:1 },
     ecap: { name:'collector', cost:{pixels:35}, prod:{energy:.10}, n:0, tier:1 },
     lab : { name:'lab',       cost:{pixels:80, energy:40}, prod:{science:.05}, n:0, tier:1 },
     
-    // Intermediate tier 1.5 buildings (more bits and bobs)
+    // Tier 1.5: Intermediate buildings with higher efficiency - unlock based on total progress
     amplifier: { name:'amplifier', cost:{pixels:150, energy:80}, prod:{pixels:.25, energy:.05}, n:0, tier:1.5, visible:()=>state.stats.totalPixels>=1000 },
     conduit: { name:'conduit', cost:{energy:120, science:10}, prod:{energy:.20, science:.02}, n:0, tier:1.5, visible:()=>state.stats.totalEnergy>=800 },
     synthesizer: { name:'synthesizer', cost:{pixels:200, energy:100, science:15}, prod:{pixels:.15, energy:.15, science:.08}, n:0, tier:1.5, visible:()=>state.stats.totalScience>=50 },
     resonator: { name:'resonator', cost:{science:40, pixels:300}, prod:{science:.12, pixels:.08}, n:0, tier:1.5, visible:()=>state.stats.totalScience>=100 },
     
+    // Tier 2+: Late game buildings requiring prestige and advanced resources
     quantumGen: { name:'quantum-gen', cost:{science:800,energy:3000,pixels:5000}, prod:{quantum:.02}, n:0, tier:2, visible:()=>state.stats.totalScience>=1000&&state.stats.totalPixels>=50000&&state.prestige.level>=1 },
     antimatterGen: { name:'antimatter-gen', cost:{quantum:50,pixels:10000}, prod:{antimatter:.01}, n:0, tier:3, visible:()=>state.prestige.level>=2 },
     megaLab: { name:'mega-lab', cost:{antimatter:1,science:5000}, prod:{science:2}, n:0, tier:3, visible:()=>state.prestige.level>=2 },
-    autoFactory: { name:'auto-factory', cost:{antimatter:5,quantum:100}, prod:{pixels:10,energy:5}, n:0, tier:4, visible:()=>state.prestige.level>=3 }
+    autoFactory: { name:'auto-factory', cost:{antimatter:5,quantum:100}, prod:{pixels:10,energy:5}, n:0, tier:4, visible:()=>state.prestige.level>=3 },
+    
+    // Ball vitality support buildings
+    vitalityStation: { name:'vitality station', cost:{energy:200,science:50}, prod:{}, n:0, tier:2, 
+      effect: () => state.decay.globalDecayRate * Math.pow(0.9, Buildings.vitalityStation.n),
+      visible:()=>state.stats.wallHits>=800 },
+    rejuvenator: { name:'rejuvenator', cost:{science:300,pixels:1500}, prod:{}, n:0, tier:2.5,
+      effect: () => state.decay.vitalityRecoveryRate + (Buildings.rejuvenator.n * 0.01),
+      visible:()=>state.stats.wallHits>=1500 },
+    eternityCore: { name:'eternity core', cost:{quantum:20,antimatter:2}, prod:{}, n:0, tier:4,
+      effect: () => Buildings.eternityCore.n > 0 ? 0 : state.decay.globalDecayRate,
+      visible:()=>state.prestige.level>=2 && state.stats.wallHits>=10000 }
   };
 
+  // Research: one-time unlocks that provide permanent improvements or unlock new features
   const Research = {
+    // Basic research for early improvements
     physics: { name:'physics', cost:{science:120}, run(){ state.balls.forEach(b=>{b.vx*=1.07; b.vy*=1.07;}); delete Research.physics; buildResearch(); } },
-    cache:   { name:'cache',   cost:{science:250}, run(){ savePeriod=2500; delete Research.cache; buildResearch(); } },
+    cache:   { name:'cache',   cost:{science:250}, run(){ savePeriod=2500; setupSaveInterval(); delete Research.cache; buildResearch(); } },
     ballPhysics: { name:'collision-bonus', cost:{science:500}, run(){ state.mul.collisionBonus=2; delete Research.ballPhysics; buildResearch(); } },
     
-    // Intermediate research (more bits and bobs)
+    // Intermediate research - unlock with moderate progress requirements
     momentum: { name:'momentum-theory', cost:{science:300}, run(){ state.mul.momentum=1.2; delete Research.momentum; buildResearch(); }, visible:()=>state.stats.totalScience>=150 },
     harmonics: { name:'wave-harmonics', cost:{science:450,energy:1000}, run(){ state.mul.harmonics=1.25; delete Research.harmonics; buildResearch(); }, visible:()=>state.stats.totalScience>=300 },
     fieldTheory: { name:'field-theory', cost:{science:600,pixels:2000}, run(){ state.mul.fieldTheory=1.3; delete Research.fieldTheory; buildResearch(); }, visible:()=>state.stats.totalScience>=400 },
     entanglement: { name:'entanglement-prep', cost:{science:800,energy:2000}, run(){ state.mul.entanglement=1.15; delete Research.entanglement; buildResearch(); }, visible:()=>state.stats.totalScience>=600 },
     
+    // Advanced research - require prestige level and significant resources
     quantumTheory: { name:'quantum-theory', cost:{science:1500,energy:3000}, run(){ state.mul.quantum=2; delete Research.quantumTheory; buildResearch(); }, visible:()=>state.stats.totalScience>=1000&&state.prestige.level>=1 },
     timeAccel: { name:'time-acceleration', cost:{antimatter:1,quantum:10}, run(){ state.mul.timeScale=1.5; delete Research.timeAccel; buildResearch(); }, visible:()=>state.prestige.level>=2 },
-    prestigeUnlock: { name:'enable-prestige', cost:{science:2000,energy:5000}, run(){ state.prestige.unlocked=true; delete Research.prestigeUnlock; buildResearch(); updatePrestige(); }, visible:()=>!state.prestige.unlocked&&state.stats.totalPixels>=100000&&state.stats.totalScience>=800 }
+    prestigeUnlock: { name:'enable-prestige', cost:{science:2000,energy:5000}, run(){ state.prestige.unlocked=true; delete Research.prestigeUnlock; buildResearch(); updatePrestige(); }, visible:()=>!state.prestige.unlocked&&state.stats.totalPixels>=100000&&state.stats.totalScience>=800 },
+    
+    // Ball vitality research
+    vitalityTheory: { name:'vitality theory', cost:{science:350,energy:1000}, run(){ state.balls.forEach(b => { b.maxVitality = 1.2; if(b.vitality > 1.0) b.vitality = Math.min(b.maxVitality, b.vitality); }); delete Research.vitalityTheory; buildResearch(); }, visible:()=>state.stats.wallHits>=1200 },
+    decayNullification: { name:'decay nullification', cost:{quantum:15,antimatter:1}, run(){ state.decay.decayEnabled = false; delete Research.decayNullification; buildResearch(); }, visible:()=>state.prestige.level>=2 && state.stats.wallHits>=5000 }
   };
 
   const Milestones = {
@@ -455,7 +492,8 @@
     thousand: { name:'Pixel Collector', desc:'Generate 1000 pixels', threshold:1000, stat:'totalPixels', reward:'+10% pixel generation', completed:false },
     tenK: { name:'Energy Master', desc:'Generate 10K energy', threshold:10000, stat:'totalEnergy', reward:'Unlock energy multiplier', completed:false },
     ballMaster: { name:'Ball Spawner', desc:'Spawn 50 balls', threshold:50, stat:'ballsSpawned', reward:'Balls start 20% faster', completed:false },
-    scienceFirst: { name:'Researcher', desc:'Generate 100 science', threshold:100, stat:'totalScience', reward:'Lab efficiency +50%', completed:false }
+    scienceFirst: { name:'Researcher', desc:'Generate 100 science', threshold:100, stat:'totalScience', reward:'Lab efficiency +50%', completed:false },
+    survivor: { name:'Survivor', desc:'Lose 10 balls to decay', threshold:10, stat:'ballsLost', reward:'Emergency ball spawn when no balls remain', completed:false }
   };
 
   const Challenges = {
@@ -534,7 +572,14 @@
       type: type,
       color: ballType.color,
       age: 0,
-      specialCooldown: 0
+      specialCooldown: 0,
+      // New collision tracking and decay properties
+      collisions: 0,
+      lastCollisionTime: Date.now(),
+      collisionIntervals: [],
+      vitality: 1.0, // 1.0 = full effectiveness, decreases over time
+      decayRate: 0.001, // Base decay rate per frame
+      maxVitality: 1.0
     };
   }
   function can(cost){ return Object.entries(cost).every(([k,v]) => (state.resources[k]||0) >= v ); }
@@ -590,6 +635,7 @@
       case 'thousand': state.mul.pixel *= 1.1; break;
       case 'ballMaster': state.balls.forEach(b => { b.vx *= 1.2; b.vy *= 1.2; }); break;
       case 'scienceFirst': state.mul.science = (state.mul.science || 1) * 1.5; break;
+      case 'survivor': /* Emergency spawn system enabled */ break;
     }
   }
 
@@ -702,6 +748,8 @@
       if(u.visible && !u.visible()) continue;
       const b=line(`${u.name}  [${costStr(u.cost)}]`,`u_${k}`);
       b.onclick=()=>{ if(can(u.cost)){ pay(u.cost); u.run(); refresh(true); } };
+      // Set disabled property for accessibility
+      b.disabled = !can(u.cost);
       root.appendChild(b);
     }
   }
@@ -710,6 +758,8 @@
       if(bld.visible && !bld.visible()) continue;
       const b=line(`${bld.name} x${bld.n}  [${costStr(bld.cost)}]`,`b_${k}`);
       b.onclick=()=>{ if(can(bld.cost)){ pay(bld.cost); bld.n++; updateBuildingCost(k); refresh(true); } };
+      // Set disabled property for accessibility
+      b.disabled = !can(bld.cost);
       root.appendChild(b);
     }
   }
@@ -718,6 +768,8 @@
       if(r.visible && !r.visible()) continue;
       const b=line(`${r.name}  [${costStr(r.cost)}]`,`r_${k}`);
       b.onclick=()=>{ if(can(r.cost)){ pay(r.cost); r.run(); refresh(true); } };
+      // Set disabled property for accessibility
+      b.disabled = !can(r.cost);
       root.appendChild(b);
     }
   }
@@ -795,17 +847,26 @@
     for(const [k,u] of Object.entries(Upgrades)){
       if(u.visible && !u.visible()) continue;
       const el=document.getElementById(`u_${k}`); if(!el) continue;
-      el.classList.toggle('disabled', !can(u.cost)); el.textContent = `${u.name}  [${costStr(u.cost)}]`;
+      const canAfford = can(u.cost);
+      el.classList.toggle('disabled', !canAfford); 
+      el.disabled = !canAfford; // Set disabled property for accessibility
+      el.textContent = `${u.name}  [${costStr(u.cost)}]`;
     }
     for(const [k,bld] of Object.entries(Buildings)){
       if(bld.visible && !bld.visible()) continue;
       const el=document.getElementById(`b_${k}`); if(!el) continue;
-      el.classList.toggle('disabled', !can(bld.cost)); el.textContent = `${bld.name} x${bld.n}  [${costStr(bld.cost)}]`;
+      const canAfford = can(bld.cost);
+      el.classList.toggle('disabled', !canAfford);
+      el.disabled = !canAfford; // Set disabled property for accessibility
+      el.textContent = `${bld.name} x${bld.n}  [${costStr(bld.cost)}]`;
     }
     for(const [k,r] of Object.entries(Research)){
       if(r.visible && !r.visible()) continue;
       const el=document.getElementById(`r_${k}`); if(!el) continue;
-      el.classList.toggle('disabled', !can(r.cost)); el.textContent = `${r.name}  [${costStr(r.cost)}]`;
+      const canAfford = can(r.cost);
+      el.classList.toggle('disabled', !canAfford);
+      el.disabled = !canAfford; // Set disabled property for accessibility
+      el.textContent = `${r.name}  [${costStr(r.cost)}]`;
     }
   }
 
@@ -942,6 +1003,29 @@
     html += `<div class="progress-item"><span>Wall Hits</span><span>${state.stats.wallHits.toLocaleString()}</span></div>`;
     html += `<div class="progress-item"><span>Balls Spawned</span><span>${state.stats.ballsSpawned}</span></div>`;
     html += `<div class="progress-item"><span>Active Balls</span><span>${state.balls.length}</span></div>`;
+    
+    // Ball vitality and decay statistics
+    if(state.balls.length > 0) {
+      const avgVitality = state.balls.reduce((sum, b) => sum + (b.vitality || 1), 0) / state.balls.length;
+      const totalCollisions = state.balls.reduce((sum, b) => sum + (b.collisions || 0), 0);
+      html += `<div class="progress-item"><span>Avg Ball Vitality</span><span>${(avgVitality * 100).toFixed(1)}%</span></div>`;
+      html += `<div class="progress-item"><span>Ball Collisions</span><span>${totalCollisions.toLocaleString()}</span></div>`;
+      
+      if(state.decay.decayEnabled) {
+        html += `<div class="progress-item"><span>Decay Rate</span><span>${(state.decay.globalDecayRate * 100).toFixed(1)}%</span></div>`;
+        html += `<div class="progress-item"><span>Recovery Rate</span><span>${(state.decay.vitalityRecoveryRate * 100).toFixed(1)}%</span></div>`;
+      } else {
+        html += `<div class="progress-item"><span>Decay Status</span><span>Nullified</span></div>`;
+      }
+    }
+    
+    // Ball death statistics
+    if(state.stats.ballsLost > 0) {
+      html += `<div class="progress-item"><span>Balls Lost</span><span>${state.stats.ballsLost.toLocaleString()}</span></div>`;
+      const survivalRate = state.stats.ballsSpawned > 0 ? ((state.stats.ballsSpawned - state.stats.ballsLost) / state.stats.ballsSpawned * 100) : 100;
+      html += `<div class="progress-item"><span>Survival Rate</span><span>${survivalRate.toFixed(1)}%</span></div>`;
+    }
+    
     if(state.challengesCompleted && Object.keys(state.challengesCompleted).length > 0) {
       const completed = Object.keys(state.challengesCompleted).filter(k => state.challengesCompleted[k]).length;
       html += `<div class="progress-item"><span>Challenges Completed</span><span>${completed}</span></div>`;
@@ -959,14 +1043,38 @@
     const resourceMult = (challengeEffects.resourceMult || 1);
     const maxBalls = challengeEffects.maxBalls || 999;
     
+    // Calculate current decay rate from buildings
+    let currentDecayRate = state.decay.globalDecayRate;
+    if(Buildings.vitalityStation && Buildings.vitalityStation.effect) {
+      currentDecayRate = Buildings.vitalityStation.effect();
+    }
+    if(Buildings.eternityCore && Buildings.eternityCore.effect) {
+      currentDecayRate = Buildings.eternityCore.effect();
+    }
+    
     // Limit balls if challenge requires it
     if(state.balls.length > maxBalls){
       state.balls = state.balls.slice(0, maxBalls);
     }
     
-    for(const b of state.balls){
+    // Process each ball and handle decay/death
+    for(let i = state.balls.length - 1; i >= 0; i--) {
+      const b = state.balls[i];
       const ballType = BallTypes[b.type] || BallTypes.basic;
       b.age++;
+      
+      // Apply decay system if enabled
+      if(state.decay.decayEnabled && currentDecayRate > 0) {
+        const actualDecayRate = b.decayRate * currentDecayRate;
+        b.vitality = Math.max(0.0, b.vitality - actualDecayRate); // Allow balls to reach 0 vitality
+        
+        // Check if ball should "die" from decay
+        if(b.vitality <= 0.0) {
+          state.stats.ballsLost++;
+          state.balls.splice(i, 1); // Remove the ball
+          continue; // Skip to next ball
+        }
+      }
       
       const baseSpeed = ballType.speed * ballSpeedMult;
       if(!Number.isFinite(b.vx)||Math.abs(b.vx)<.05) b.vx=randSign()*1.2*baseSpeed;
@@ -974,18 +1082,80 @@
       
       // Apply persistent speed bonus
       const persistentSpeedBonus = MetaUpgrades.persistentSpeed.effect(MetaUpgrades.persistentSpeed.level);
-      b.x+=(b.vx * persistentSpeedBonus); b.y+=(b.vy * persistentSpeedBonus);
+      const deltaVx = b.vx * persistentSpeedBonus;
+      const deltaVy = b.vy * persistentSpeedBonus;
       
-      let hitV=false, hitH=false;
-      if(b.x-b.r<=0){ b.x=b.r; b.vx*=-1; hitV=true; }
-      else if(b.x+b.r>=cssW){ b.x=cssW-b.r; b.vx*=-1; hitV=true; }
-      if(b.y-b.r<=0){ b.y=b.r; b.vy*=-1; hitH=true; }
-      else if(b.y+b.r>=cssH){ b.y=cssH-b.r; b.vy*=-1; hitH=true; }
+      // Substep movement to prevent tunneling at high velocities
+      const maxStepSize = Math.min(b.r * 0.5, 5); // Maximum distance per substep
+      const distance = Math.sqrt(deltaVx * deltaVx + deltaVy * deltaVy);
+      const substeps = Math.max(1, Math.ceil(distance / maxStepSize));
       
+      const stepDx = deltaVx / substeps;
+      const stepDy = deltaVy / substeps;
+      
+      let hitV = false, hitH = false;
+      
+      // Perform substepped movement with collision detection
+      for(let step = 0; step < substeps; step++) {
+        b.x += stepDx;
+        b.y += stepDy;
+        
+        // Check and handle boundary collisions for this substep
+        if(b.x - b.r <= 0){ 
+          b.x = b.r; 
+          b.vx *= -1; 
+          hitV = true; 
+        }
+        else if(b.x + b.r >= cssW){ 
+          b.x = cssW - b.r; 
+          b.vx *= -1; 
+          hitV = true; 
+        }
+        
+        if(b.y - b.r <= 0){ 
+          b.y = b.r; 
+          b.vy *= -1; 
+          hitH = true; 
+        }
+        else if(b.y + b.r >= cssH){ 
+          b.y = cssH - b.r; 
+          b.vy *= -1; 
+          hitH = true; 
+        }
+        
+        // If collision occurred, break out of substeps to handle resource generation
+        if(hitV || hitH) break;
+      }
+      
+      // Handle collision effects and resource generation
       if(hitV||hitH){
         state.stats.wallHits++;
+        
+        // Enhanced collision tracking for individual balls
+        const currentTime = Date.now();
+        const timeSinceLastCollision = currentTime - b.lastCollisionTime;
+        
+        b.collisions++;
+        b.lastCollisionTime = currentTime;
+        b.collisionIntervals.push(timeSinceLastCollision);
+        
+        // Keep only last 10 intervals for analysis
+        if(b.collisionIntervals.length > 10) {
+          b.collisionIntervals = b.collisionIntervals.slice(-10);
+        }
+        
+        // Apply vitality recovery from collisions
+        let recoveryRate = state.decay.vitalityRecoveryRate;
+        if(Buildings.rejuvenator && Buildings.rejuvenator.effect) {
+          recoveryRate = Buildings.rejuvenator.effect();
+        }
+        if(recoveryRate > 0) {
+          b.vitality = Math.min(b.maxVitality, b.vitality + recoveryRate);
+        }
+        
         const collisionBonus = state.mul.collisionBonus || 1;
-        const totalResourceMult = resourceMult * collisionBonus * 
+        const vitalityMultiplier = b.vitality; // Ball effectiveness based on vitality
+        const totalResourceMult = resourceMult * collisionBonus * vitalityMultiplier *
           (state.mul.ballGrip || 1) * (state.mul.efficiency || 1) * (state.mul.resonance || 1) * 
           (state.mul.catalyst || 1) * (state.mul.harmonic || 1) * (state.mul.momentum || 1) * 
           (state.mul.harmonics || 1) * (state.mul.fieldTheory || 1) * (state.mul.entanglement || 1);
@@ -1072,6 +1242,21 @@
         }
       }
     }
+    
+    // Emergency ball spawning system - prevent complete extinction
+    if(state.balls.length === 0) {
+      if(Milestones.survivor && Milestones.survivor.completed) {
+        // Spawn emergency ball if survivor milestone is completed
+        state.balls.push(createBall());
+        console.log('Emergency ball spawned due to extinction!');
+      } else {
+        // Spawn emergency ball but only if the player had balls before
+        if(state.stats.ballsSpawned > 1) {
+          state.balls.push(createBall());
+          console.log('Emergency ball spawned to prevent game over!');
+        }
+      }
+    }
   }
 
   function draw(){
@@ -1091,19 +1276,99 @@
       ctx.restore();
     }
     
-    // Draw balls with their specific colors
+    // Draw balls with enhanced visual decay indicators
     for(const b of state.balls){ 
+      const ballType = BallTypes[b.type] || BallTypes.basic;
+      const vitality = b.vitality || 1.0;
+      
+      // Enhanced visual decay effects based on vitality level
+      ctx.save();
+      
+      // Ball opacity and color shift based on vitality
+      const baseOpacity = Math.max(0.3, vitality);
+      ctx.globalAlpha = baseOpacity;
+      
+      // Color shifting for decay - balls become darker/redder as they decay
+      let ballColor = b.color || '#e6e6e6';
+      if(vitality < 0.8 && state.decay.decayEnabled) {
+        // Mix the original color with red/brown based on decay level
+        const decayIntensity = (0.8 - vitality) / 0.8; // 0 = healthy, 1 = very decayed
+        const r = 150 + Math.floor(decayIntensity * 100); // Redder
+        const g = Math.floor(150 * (1 - decayIntensity * 0.7)); // Less green
+        const b_color = Math.floor(150 * (1 - decayIntensity * 0.7)); // Less blue
+        ballColor = `rgb(${r},${g},${b_color})`;
+      }
+      
       ctx.beginPath(); 
-      ctx.arc(b.x,b.y,b.r,0,Math.PI*2); 
-      ctx.fillStyle = b.color || '#e6e6e6'; 
+      ctx.arc(b.x, b.y, b.r, 0, Math.PI*2); 
+      ctx.fillStyle = ballColor;
       ctx.fill(); 
       
-      // Add glow effect for special balls
+      // Add decay texture/pattern for very decayed balls
+      if(vitality < 0.5 && state.decay.decayEnabled) {
+        ctx.save();
+        ctx.globalAlpha = (0.5 - vitality) * 2; // 0 to 1 as vitality goes from 0.5 to 0
+        ctx.strokeStyle = '#800000'; // Dark red
+        ctx.lineWidth = 1;
+        
+        // Draw crack-like patterns
+        const numCracks = Math.floor((0.5 - vitality) * 8) + 2;
+        for(let crack = 0; crack < numCracks; crack++) {
+          const angle = (crack / numCracks) * Math.PI * 2 + b.age * 0.001;
+          const startRadius = b.r * 0.3;
+          const endRadius = b.r * 0.9;
+          
+          ctx.beginPath();
+          ctx.moveTo(
+            b.x + Math.cos(angle) * startRadius, 
+            b.y + Math.sin(angle) * startRadius
+          );
+          ctx.lineTo(
+            b.x + Math.cos(angle) * endRadius, 
+            b.y + Math.sin(angle) * endRadius
+          );
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+      
+      ctx.restore();
+      
+      // Vitality ring indicator (enhanced)
+      if(vitality < 1.0 && state.decay.decayEnabled) {
+        ctx.save();
+        // Color coding: green > yellow > orange > red as vitality decreases
+        let ringColor = '#4af'; // Blue for healthy
+        if(vitality < 0.8) ringColor = '#4f4'; // Green
+        if(vitality < 0.6) ringColor = '#ff4'; // Yellow
+        if(vitality < 0.4) ringColor = '#f84'; // Orange  
+        if(vitality < 0.2) ringColor = '#f44'; // Red
+        
+        ctx.strokeStyle = ringColor;
+        ctx.lineWidth = Math.max(2, 4 * (1 - vitality)); // Thicker ring as vitality decreases
+        ctx.globalAlpha = 0.8;
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.r + 3, 0, Math.PI * 2 * vitality);
+        ctx.stroke();
+        
+        // Add pulsing effect for critically low vitality
+        if(vitality < 0.2) {
+          ctx.globalAlpha = 0.3 + 0.3 * Math.sin(Date.now() * 0.01);
+          ctx.strokeStyle = '#fff';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.arc(b.x, b.y, b.r + 5, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+      
+      // Add glow effect for special balls (diminished by decay)
       if(b.type !== 'basic') {
         ctx.save();
-        ctx.globalAlpha = 0.3;
+        ctx.globalAlpha = 0.3 * vitality; // Glow affected by vitality
         ctx.beginPath();
-        ctx.arc(b.x,b.y,b.r+2,0,Math.PI*2);
+        ctx.arc(b.x, b.y, b.r + 2, 0, Math.PI*2);
         ctx.fillStyle = b.color;
         ctx.fill();
         ctx.restore();
@@ -1112,11 +1377,11 @@
       // Challenge mode indicators
       if(state.activeChallenge && state.activeChallenge === 'slowBalls'){
         ctx.save();
-        ctx.globalAlpha = 0.5;
+        ctx.globalAlpha = 0.5 * vitality;
         ctx.strokeStyle = '#4af';
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.arc(b.x,b.y,b.r+4,0,Math.PI*2);
+        ctx.arc(b.x, b.y, b.r + 4, 0, Math.PI*2);
         ctx.stroke();
         ctx.restore();
       }
@@ -1189,7 +1454,9 @@
         challengesCompleted:state.challengesCompleted,
         efficiency:state.efficiency,
         lastSave:state.lastSave,
-        metaUpgrades:Object.fromEntries(Object.entries(MetaUpgrades).map(([k,v])=>[k,{level:v.level}]))
+        metaUpgrades:Object.fromEntries(Object.entries(MetaUpgrades).map(([k,v])=>[k,{level:v.level}])),
+        // New decay system data
+        decay:state.decay
       };
       localStorage.setItem('tty_idle_save', JSON.stringify(saveData));
     }catch(e){
@@ -1211,25 +1478,122 @@
         if(!d.lastSave) d.lastSave = Date.now();
       }
       
-      if(d.r) Object.assign(state.resources,d.r); 
-      if(d.mul) Object.assign(state.mul,d.mul); 
-      if(d.prestige) Object.assign(state.prestige,d.prestige);
-      if(d.milestones) Object.assign(state.milestones,d.milestones);
-      if(d.automation) Object.assign(state.automation,d.automation);
-      if(d.ballTypes) state.ballTypes = d.ballTypes;
-      if(d.stats) Object.assign(state.stats,d.stats);
-      if(d.activeChallenge) state.activeChallenge = d.activeChallenge;
-      if(d.challengesCompleted) Object.assign(state.challengesCompleted,d.challengesCompleted);
-      if(d.efficiency) Object.assign(state.efficiency,d.efficiency);
-      if(d.lastSave) state.lastSave = d.lastSave;
-      if(d.rates) Object.assign(state.rates, d.rates);
-      if(d.metaUpgrades) {
-        for(const [k,data] of Object.entries(d.metaUpgrades)){
-          if(MetaUpgrades[k]) MetaUpgrades[k].level = data.level;
+      // Validate and clamp resources
+      if(d.r) {
+        for(const [k,v] of Object.entries(d.r)) {
+          if(typeof v === 'number' && Number.isFinite(v) && v >= 0) {
+            state.resources[k] = Math.min(v, 1e12); // Clamp to reasonable maximum
+          }
         }
       }
-      if(d.balls&&Array.isArray(d.balls)&&d.balls.length) state.balls=d.balls; 
-      if(d.b){ for(const [k,n] of Object.entries(d.b)) if(Buildings[k]) Buildings[k].n=n; } 
+      
+      // Validate multipliers
+      if(d.mul) {
+        for(const [k,v] of Object.entries(d.mul)) {
+          if(typeof v === 'number' && Number.isFinite(v) && v > 0) {
+            state.mul[k] = Math.min(v, 1e6); // Clamp multipliers
+          }
+        }
+      }
+      
+      // Validate and restore other state
+      if(d.prestige && typeof d.prestige === 'object') Object.assign(state.prestige,d.prestige);
+      if(d.milestones && typeof d.milestones === 'object') Object.assign(state.milestones,d.milestones);
+      if(d.automation && typeof d.automation === 'object') Object.assign(state.automation,d.automation);
+      if(d.ballTypes && Array.isArray(d.ballTypes)) {
+        state.ballTypes = d.ballTypes.filter(type => BallTypes[type]); // Only valid ball types
+      }
+      if(d.stats && typeof d.stats === 'object') {
+        for(const [k,v] of Object.entries(d.stats)) {
+          if(typeof v === 'number' && Number.isFinite(v) && v >= 0) {
+            state.stats[k] = Math.min(v, 1e12);
+          }
+        }
+      }
+      if(d.activeChallenge && typeof d.activeChallenge === 'string') {
+        state.activeChallenge = Challenges[d.activeChallenge] ? d.activeChallenge : null;
+      }
+      if(d.challengesCompleted && typeof d.challengesCompleted === 'object') Object.assign(state.challengesCompleted,d.challengesCompleted);
+      if(d.efficiency && typeof d.efficiency === 'object') {
+        for(const [k,v] of Object.entries(d.efficiency)) {
+          if(typeof v === 'number' && Number.isFinite(v) && v > 0) {
+            state.efficiency[k] = Math.max(0.1, Math.min(v, 100)); // Clamp efficiency
+          }
+        }
+      }
+      if(d.lastSave && typeof d.lastSave === 'number' && Number.isFinite(d.lastSave)) {
+        state.lastSave = d.lastSave;
+      }
+      if(d.rates && typeof d.rates === 'object') Object.assign(state.rates, d.rates);
+      
+      // Validate and restore meta upgrades
+      if(d.metaUpgrades && typeof d.metaUpgrades === 'object') {
+        for(const [k,data] of Object.entries(d.metaUpgrades)){
+          if(MetaUpgrades[k] && data && typeof data.level === 'number') {
+            MetaUpgrades[k].level = Math.max(0, Math.min(data.level, MetaUpgrades[k].maxLevel));
+          }
+        }
+      }
+      
+      // Validate and clamp balls array
+      if(d.balls && Array.isArray(d.balls) && d.balls.length > 0) {
+        const validBalls = [];
+        for(const ball of d.balls.slice(0, 1000)) { // Limit to reasonable number
+          if(ball && typeof ball === 'object' && 
+             typeof ball.x === 'number' && typeof ball.y === 'number' &&
+             typeof ball.vx === 'number' && typeof ball.vy === 'number' &&
+             typeof ball.r === 'number' && typeof ball.type === 'string' &&
+             BallTypes[ball.type]) {
+            
+            // Clamp ball properties to valid ranges
+            const ballType = BallTypes[ball.type];
+            const restoredBall = {
+              x: Math.max(ball.r, Math.min(ball.x, cssW - ball.r)),
+              y: Math.max(ball.r, Math.min(ball.y, cssH - ball.r)),
+              vx: Math.max(-50, Math.min(ball.vx, 50)), // Clamp velocity
+              vy: Math.max(-50, Math.min(ball.vy, 50)),
+              r: ballType.r,
+              type: ball.type,
+              color: ballType.color,
+              age: Math.max(0, ball.age || 0),
+              specialCooldown: Math.max(0, ball.specialCooldown || 0),
+              // Validate new decay system properties
+              collisions: Math.max(0, ball.collisions || 0),
+              lastCollisionTime: ball.lastCollisionTime || Date.now(),
+              collisionIntervals: Array.isArray(ball.collisionIntervals) ? ball.collisionIntervals.slice(-10) : [],
+              vitality: Math.max(0.1, Math.min(ball.vitality || 1.0, ball.maxVitality || 1.0)),
+              decayRate: Math.max(0, Math.min(ball.decayRate || 0.001, 0.1)),
+              maxVitality: Math.max(1.0, Math.min(ball.maxVitality || 1.0, 2.0))
+            };
+            validBalls.push(restoredBall);
+          }
+        }
+        if(validBalls.length > 0) {
+          state.balls = validBalls;
+        }
+      }
+      
+      // Validate and restore decay system state
+      if(d.decay && typeof d.decay === 'object') {
+        if(typeof d.decay.globalDecayRate === 'number' && d.decay.globalDecayRate >= 0) {
+          state.decay.globalDecayRate = Math.min(d.decay.globalDecayRate, 10.0);
+        }
+        if(typeof d.decay.vitalityRecoveryRate === 'number' && d.decay.vitalityRecoveryRate >= 0) {
+          state.decay.vitalityRecoveryRate = Math.min(d.decay.vitalityRecoveryRate, 1.0);
+        }
+        if(typeof d.decay.decayEnabled === 'boolean') {
+          state.decay.decayEnabled = d.decay.decayEnabled;
+        }
+      }
+      
+      // Validate and restore building counts
+      if(d.b && typeof d.b === 'object') { 
+        for(const [k,n] of Object.entries(d.b)) {
+          if(Buildings[k] && typeof n === 'number' && Number.isFinite(n) && n >= 0) {
+            Buildings[k].n = Math.min(n, 10000); // Clamp building counts
+          }
+        }
+      } 
       
       console.log('Save loaded successfully');
     }catch(e){
@@ -1237,7 +1601,19 @@
       // Don't crash the game, just continue with defaults
     } 
   }
-  setInterval(()=>{ state.lastSave = Date.now(); save(); }, 5000);
+
+  // Reactive save system that respects savePeriod changes
+  let saveIntervalId = null;
+  function setupSaveInterval() {
+    if (saveIntervalId) {
+      clearInterval(saveIntervalId);
+    }
+    saveIntervalId = setInterval(() => { 
+      state.lastSave = Date.now(); 
+      save(); 
+    }, savePeriod);
+  }
+  setupSaveInterval(); // Initialize save system
 
   // ---------- tiny test runner ----------
   function runTests(){

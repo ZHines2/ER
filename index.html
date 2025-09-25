@@ -175,6 +175,50 @@
       if(hitV&&hitH){ state.resources.pixels += 2*state.mul.pixel; state.resources.energy += 1*state.mul.energy; }
       else if(hitV||hitH){ state.resources.pixels += 1*state.mul.pixel; state.resources.energy += .5*state.mul.energy; }
     }
+    
+    // Ball-to-ball collision detection
+    for(let i = 0; i < state.balls.length; i++){
+      for(let j = i + 1; j < state.balls.length; j++){
+        const b1 = state.balls[i];
+        const b2 = state.balls[j];
+        const dx = b2.x - b1.x;
+        const dy = b2.y - b1.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        const minDistance = b1.r + b2.r;
+        
+        if(distance < minDistance && distance > 0){
+          // Collision detected - calculate elastic collision response
+          const nx = dx / distance; // normalized collision normal
+          const ny = dy / distance;
+          
+          // Separate balls to prevent overlap
+          const overlap = minDistance - distance;
+          const separateX = nx * overlap * 0.5;
+          const separateY = ny * overlap * 0.5;
+          b1.x -= separateX;
+          b1.y -= separateY;
+          b2.x += separateX;
+          b2.y += separateY;
+          
+          // Calculate relative velocity in collision normal direction
+          const dvx = b2.vx - b1.vx;
+          const dvy = b2.vy - b1.vy;
+          const dvn = dvx * nx + dvy * ny;
+          
+          // Do not resolve if velocities are separating
+          if(dvn <= 0) continue;
+          
+          // Calculate collision impulse (assuming equal mass)
+          const impulse = dvn;
+          
+          // Update velocities
+          b1.vx += impulse * nx;
+          b1.vy += impulse * ny;
+          b2.vx -= impulse * nx;
+          b2.vy -= impulse * ny;
+        }
+      }
+    }
   }
 
   function draw(){

@@ -41,14 +41,15 @@
       <div class="section crt">
         <h2>// resources</h2>
         <div class="kv mono">
-          <span>pixels: <span id="pixelsDisplay">0</span></span>
-          <span>energy: <span id="energyDisplay">0</span></span>
-          <span>science: <span id="scienceDisplay">0</span></span>
-          <span id="quantumRow" style="display:none">quantum: <span id="quantumDisplay">0</span></span>
-          <span id="antimatterRow" style="display:none">antimatter: <span id="antimatterDisplay">0</span></span>
+          <span>pixels: <span id="pixelsDisplay">0</span><span id="pixelsRate" style="color:#4af;font-size:10px"></span></span>
+          <span>energy: <span id="energyDisplay">0</span><span id="energyRate" style="color:#4af;font-size:10px"></span></span>
+          <span>science: <span id="scienceDisplay">0</span><span id="scienceRate" style="color:#4af;font-size:10px"></span></span>
+          <span id="quantumRow" style="display:none">quantum: <span id="quantumDisplay">0</span><span id="quantumRate" style="color:#f4a;font-size:10px"></span></span>
+          <span id="antimatterRow" style="display:none">antimatter: <span id="antimatterDisplay">0</span><span id="antimatterRate" style="color:#fa4;font-size:10px"></span></span>
         </div>
         <div id="prestigeInfo" class="mono" style="display:none;margin-top:8px;color:#f4a">
           prestige lvl: <span id="prestigeLevel">0</span> | points: <span id="prestigePoints">0</span>
+          <div style="margin-top:4px;font-size:10px" id="prestigeProgress"></div>
         </div>
         <pre id="tests"></pre>
       </div>
@@ -102,6 +103,7 @@
     efficiency:{ballSpeed:1,production:1,cost:1},
     offlineTime:0,
     lastSave:Date.now(),
+    rates:{pixels:0,energy:0,science:0,quantum:0,antimatter:0},
     stats:{totalPixels:0,totalEnergy:0,totalScience:0,ballsSpawned:1,wallHits:0}
   };
 
@@ -525,20 +527,34 @@
     document.getElementById('energyDisplay').textContent = state.resources.energy.toFixed(1);
     document.getElementById('scienceDisplay').textContent = state.resources.science.toFixed(1);
     
+    // Show resource rates
+    document.getElementById('pixelsRate').textContent = state.rates.pixels > 0 ? ` (+${state.rates.pixels.toFixed(1)}/s)` : '';
+    document.getElementById('energyRate').textContent = state.rates.energy > 0 ? ` (+${state.rates.energy.toFixed(1)}/s)` : '';
+    document.getElementById('scienceRate').textContent = state.rates.science > 0 ? ` (+${state.rates.science.toFixed(1)}/s)` : '';
+    
     // Show advanced resources when they exist
     if(state.resources.quantum > 0) {
       document.getElementById('quantumRow').style.display = 'block';
       document.getElementById('quantumDisplay').textContent = state.resources.quantum.toFixed(2);
+      document.getElementById('quantumRate').textContent = state.rates.quantum > 0 ? ` (+${state.rates.quantum.toFixed(2)}/s)` : '';
     }
     if(state.resources.antimatter > 0) {
       document.getElementById('antimatterRow').style.display = 'block'; 
       document.getElementById('antimatterDisplay').textContent = state.resources.antimatter.toFixed(3);
+      document.getElementById('antimatterRate').textContent = state.rates.antimatter > 0 ? ` (+${state.rates.antimatter.toFixed(3)}/s)` : '';
     }
     
     // Update prestige info
     if(state.prestige.unlocked){
       document.getElementById('prestigeLevel').textContent = state.prestige.level;
       document.getElementById('prestigePoints').textContent = state.prestige.points;
+      
+      // Show progress toward next prestige
+      const nextPrestigePoints = calculatePrestigePoints();
+      const currentProgress = Math.max(state.stats.totalPixels, state.stats.totalEnergy);
+      const threshold = Math.max(100000, 50000);
+      const progressPercent = Math.min(100, (currentProgress / threshold) * 100);
+      document.getElementById('prestigeProgress').textContent = `Next: ${nextPrestigePoints} pts (${progressPercent.toFixed(1)}% ready)`;
     }
     
     if(rebuild){ buildUpgrades(); buildBuildings(); buildResearch(); buildPrestige(); buildMilestones(); buildChallenges(); buildMetaUpgrades(); }
@@ -666,6 +682,17 @@
     // subtle scanlines
     ctx.save(); ctx.globalAlpha=.06; ctx.fillStyle="#fff"; for(let y=0;y<cssH;y+=2){ ctx.fillRect(0,y,cssW,1); } ctx.restore();
     
+    // Challenge overlay effects
+    if(state.activeChallenge){
+      ctx.save();
+      ctx.globalAlpha = 0.1;
+      if(state.activeChallenge === 'slowBalls') ctx.fillStyle = '#4af';
+      else if(state.activeChallenge === 'fewBalls') ctx.fillStyle = '#f4a';
+      else if(state.activeChallenge === 'expensiveUpgrades') ctx.fillStyle = '#fa4';
+      ctx.fillRect(0, 0, cssW, cssH);
+      ctx.restore();
+    }
+    
     // Draw balls with their specific colors
     for(const b of state.balls){ 
       ctx.beginPath(); 
@@ -683,14 +710,33 @@
         ctx.fill();
         ctx.restore();
       }
+      
+      // Challenge mode indicators
+      if(state.activeChallenge && state.activeChallenge === 'slowBalls'){
+        ctx.save();
+        ctx.globalAlpha = 0.5;
+        ctx.strokeStyle = '#4af';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(b.x,b.y,b.r+4,0,Math.PI*2);
+        ctx.stroke();
+        ctx.restore();
+      }
     }
   }
 
   // passive building production + automation
+  let lastResources = {...state.resources};
   setInterval(()=>{ 
     const challengeEffects = state.activeChallenge ? Challenges[state.activeChallenge].effect() : {};
     const timeScale = state.mul.timeScale || 1;
     const passiveMult = challengeEffects.passiveMult || 1;
+    
+    // Calculate rates before updating resources
+    for(const res of ['pixels','energy','science','quantum','antimatter']){
+      state.rates[res] = state.resources[res] - (lastResources[res] || 0);
+      lastResources[res] = state.resources[res];
+    }
     
     for(const b of Object.values(Buildings)){ 
       if(b.n>0){ 
@@ -726,9 +772,12 @@
 
   // ---------- persistence ----------
   let savePeriod = 5000;
+  const SAVE_VERSION = 2;
+  
   function save(){ 
     try{ 
-      localStorage.setItem('tty_idle_save', JSON.stringify({
+      const saveData = {
+        version: SAVE_VERSION,
         r:state.resources, 
         balls:state.balls, 
         b:Object.fromEntries(Object.entries(Buildings).map(([k,v])=>[k,v.n])), 
@@ -743,13 +792,27 @@
         efficiency:state.efficiency,
         lastSave:state.lastSave,
         metaUpgrades:Object.fromEntries(Object.entries(MetaUpgrades).map(([k,v])=>[k,{level:v.level}]))
-      })) 
-    }catch(e){} 
+      };
+      localStorage.setItem('tty_idle_save', JSON.stringify(saveData));
+    }catch(e){
+      console.error('Save failed:', e);
+    } 
   }
+  
   function load(){ 
     try{ 
       const d=JSON.parse(localStorage.getItem('tty_idle_save')||'null'); 
-      if(!d) return; 
+      if(!d) return;
+      
+      // Migrate old saves
+      if(!d.version || d.version < 2){
+        console.log('Migrating old save to version 2');
+        // Add default values for new features
+        if(!d.efficiency) d.efficiency = {ballSpeed:1,production:1,cost:1};
+        if(!d.rates) d.rates = {pixels:0,energy:0,science:0,quantum:0,antimatter:0};
+        if(!d.lastSave) d.lastSave = Date.now();
+      }
+      
       if(d.r) Object.assign(state.resources,d.r); 
       if(d.mul) Object.assign(state.mul,d.mul); 
       if(d.prestige) Object.assign(state.prestige,d.prestige);
@@ -761,6 +824,7 @@
       if(d.challengesCompleted) Object.assign(state.challengesCompleted,d.challengesCompleted);
       if(d.efficiency) Object.assign(state.efficiency,d.efficiency);
       if(d.lastSave) state.lastSave = d.lastSave;
+      if(d.rates) Object.assign(state.rates, d.rates);
       if(d.metaUpgrades) {
         for(const [k,data] of Object.entries(d.metaUpgrades)){
           if(MetaUpgrades[k]) MetaUpgrades[k].level = data.level;
@@ -768,7 +832,12 @@
       }
       if(d.balls&&Array.isArray(d.balls)&&d.balls.length) state.balls=d.balls; 
       if(d.b){ for(const [k,n] of Object.entries(d.b)) if(Buildings[k]) Buildings[k].n=n; } 
-    }catch(e){} 
+      
+      console.log('Save loaded successfully');
+    }catch(e){
+      console.error('Load failed:', e);
+      // Don't crash the game, just continue with defaults
+    } 
   }
   setInterval(()=>{ state.lastSave = Date.now(); save(); }, 5000);
 

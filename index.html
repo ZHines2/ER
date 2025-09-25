@@ -329,12 +329,16 @@
            hydrogen:0,helium:0,darkMatterFuel:0,photonEnergy:0,gravitonWaves:0},
     stats:{totalPixels:0,totalEnergy:0,totalScience:0,ballsSpawned:1,wallHits:0,ballsLost:0,
            // Cosmic stats
-           cosmicCollisions:0,realityBends:0,homingClicks:0,agenticActions:0},
+           cosmicCollisions:0,realityBends:0,homingClicks:0,agenticActions:0,
+           // Ball interaction stats
+           ballInteractions:0,quantumJumps:0,voidInteractions:0,singularitiesControlled:0,
+           // Click effect usage tracking
+           speed_boostUses:0,energy_burstUses:0,quantum_tunnelUses:0,antimatter_explosionUses:0,
+           homing_attackUses:0,light_burstUses:0,phase_shiftUses:0,void_warpUses:0,gravity_wellUses:0},
     // New cosmic interaction system
     interaction:{
-      homingActive:false,
-      homingTarget:null,
-      homingCooldown:0,
+      homingUnlocked:false,
+      cooldown:0,
       selectedBall:null
     },
     // Enhanced decay system with cosmic properties
@@ -381,6 +385,16 @@
     pMult:  { name:'pixel x2',  cost:{energy:60}, run(){ state.mul.pixel*=2; this.cost.energy=Math.ceil(this.cost.energy*3);} },
     eMult:  { name:'energy x2', cost:{pixels:70}, run(){ state.mul.energy*=2; this.cost.pixels=Math.ceil(this.cost.pixels*3);} },
     
+    // Early-game ball interaction unlocks
+    ballTouch: { name:'ball touch', cost:{pixels:25}, run(){ state.interaction.touchUnlocked = true; delete Upgrades.ballTouch; buildUpgrades(); }, visible:()=>state.stats.wallHits>=5},
+    energyTouch: { name:'energy touch', cost:{energy:50,pixels:100}, run(){ state.interaction.energyTouchUnlocked = true; delete Upgrades.energyTouch; buildUpgrades(); }, visible:()=>state.ballTypes.includes('energy')},
+    ballFocus: { name:'ball focus', cost:{pixels:200,energy:100}, run(){ state.interaction.focusUnlocked = true; delete Upgrades.ballFocus; buildUpgrades(); }, visible:()=>state.stats.ballInteractions>=10},
+    
+    // Early progression gates
+    wallBouncer: { name:'wall bouncer', cost:{pixels:80}, run(){ state.mul.wallBonus = 1.5; this.cost.pixels*=2; }, visible:()=>state.stats.wallHits>=10},
+    speedBurst: { name:'speed burst', cost:{energy:40,pixels:60}, run(){ state.balls.forEach(b => { b.speedBurstCharges = (b.speedBurstCharges || 0) + 3; }); this.cost.energy*=1.8; this.cost.pixels*=1.5; }, visible:()=>state.interaction.touchUnlocked},
+    collisionMaster: { name:'collision master', cost:{pixels:150,energy:80}, run(){ state.mul.collisionBonus = 1.3; this.cost.pixels*=2.2; this.cost.energy*=1.9; }, visible:()=>state.stats.wallHits>=25},
+    
     // Mid-game efficiency upgrades - provide smaller but stackable bonuses
     ballGrip: { name:'ball-grip', cost:{pixels:150,energy:80}, run(){ state.mul.ballGrip=1.2; this.cost.pixels*=2; this.cost.energy*=1.8; }},
     efficiency: { name:'efficiency++', cost:{energy:120,science:5}, run(){ state.mul.efficiency=(state.mul.efficiency||1)*1.15; this.cost.energy*=2; this.cost.science*=2; }},
@@ -409,10 +423,10 @@
                     run(){ state.ballTypes.push('graviton'); state.balls.push(createBall('graviton')); this.cost.gravitonWaves*=3; this.cost.spaceFabric*=2; }, 
                     visible:()=>state.prestige.level>=10&&state.resources.gravitonWaves>=50},
     
-    // Interactive cosmic systems
-    homingSystem: { name:'ball homing', cost:{antimatter:10,science:5000}, 
+    // Interactive cosmic systems - Homing specific to cosmic balls
+    homingSystem: { name:'cosmic homing', cost:{antimatter:10,science:5000,cosmicEnergy:50}, 
                     run(){ state.interaction.homingUnlocked = true; delete Upgrades.homingSystem; buildUpgrades(); }, 
-                    visible:()=>state.prestige.level>=3&&state.stats.totalScience>=2000},
+                    visible:()=>state.ballTypes.includes('cosmic')&&state.prestige.level>=5},
     agenticAI: { name:'agentic automation', cost:{cosmicEnergy:200,voidEssence:5}, 
                  run(){ state.automation.agentic = true; delete Upgrades.agenticAI; buildUpgrades(); }, 
                  visible:()=>state.prestige.level>=7&&state.resources.cosmicEnergy>=100},
@@ -515,6 +529,10 @@
   const Milestones = {
     // Basic milestones
     firstWall: { name:'First Impact', desc:'Hit a wall', threshold:1, stat:'wallHits', reward:'Unlock speed upgrade', completed:false, tier:1 },
+    firstTouch: { name:'Ball Whisperer', desc:'Click a ball 5 times', threshold:5, stat:'ballInteractions', reward:'Unlock advanced ball touches', completed:false, tier:1 },
+    speedMaster: { name:'Speed Demon', desc:'Use speed boost 10 times', threshold:10, stat:'speed_boostUses', reward:'Faster ball speed boosts', completed:false, tier:1 },
+    energyBurster: { name:'Energy Collector', desc:'Use energy burst 15 times', threshold:15, stat:'energy_burstUses', reward:'Energy burst efficiency +50%', completed:false, tier:1 },
+    
     thousand: { name:'Pixel Collector', desc:'Generate 1000 pixels', threshold:1000, stat:'totalPixels', reward:'+10% pixel generation', completed:false, tier:1 },
     tenK: { name:'Energy Master', desc:'Generate 10K energy', threshold:10000, stat:'totalEnergy', reward:'Unlock energy multiplier', completed:false, tier:1 },
     ballMaster: { name:'Ball Spawner', desc:'Spawn 50 balls', threshold:50, stat:'ballsSpawned', reward:'Balls start 20% faster', completed:false, tier:1 },
@@ -687,25 +705,39 @@
 
   // ---------- ball types & creation ----------
   const BallTypes = {
-    // Tier 1: Basic balls
-    basic: { name: 'Basic Ball', color: '#e6e6e6', r: 8, speed: 1, pixelMult: 1, energyMult: 1, mass: 1.0, restitution: 0.8, tier: 1 },
-    energy: { name: 'Energy Ball', color: '#4af', r: 10, speed: 0.8, pixelMult: 0.5, energyMult: 3, mass: 1.5, restitution: 0.9, quantumGen: 0.05, tier: 1 },
+    // Tier 1: Basic balls with unique click interactions
+    basic: { name: 'Basic Ball', color: '#e6e6e6', r: 8, speed: 1, pixelMult: 1, energyMult: 1, mass: 1.0, restitution: 0.8, tier: 1,
+            clickEffect: 'speed_boost', clickDescription: 'Click to gain temporary speed boost' },
+    energy: { name: 'Energy Ball', color: '#4af', r: 10, speed: 0.8, pixelMult: 0.5, energyMult: 3, mass: 1.5, restitution: 0.9, quantumGen: 0.05, tier: 1,
+             clickEffect: 'energy_burst', clickDescription: 'Click to generate instant energy burst' },
     
-    // Tier 2: Advanced balls
-    quantum: { name: 'Quantum Ball', color: '#f4a', r: 6, speed: 1.5, pixelMult: 2, energyMult: 0.8, mass: 0.6, restitution: 1.2, quantumGen: 0.1, tier: 2 },
-    antimatter: { name: 'Antimatter Ball', color: '#fa4', r: 12, speed: 0.6, pixelMult: 5, energyMult: 5, mass: 2.5, restitution: 0.6, antimatterGen: 0.05, tier: 2 },
+    // Tier 2: Advanced balls with enhanced interactions
+    quantum: { name: 'Quantum Ball', color: '#f4a', r: 6, speed: 1.5, pixelMult: 2, energyMult: 0.8, mass: 0.6, restitution: 1.2, quantumGen: 0.1, tier: 2,
+              clickEffect: 'quantum_tunnel', clickDescription: 'Click to quantum tunnel to random location' },
+    antimatter: { name: 'Antimatter Ball', color: '#fa4', r: 12, speed: 0.6, pixelMult: 5, energyMult: 5, mass: 2.5, restitution: 0.6, antimatterGen: 0.05, tier: 2,
+                 clickEffect: 'antimatter_explosion', clickDescription: 'Click for powerful antimatter explosion' },
     
-    // Tier 3: Cosmic balls - New expansive ball types
+    // Tier 3: Cosmic balls with specialized interactions
     cosmic: { name: 'Cosmic Ball', color: '#ff6b9d', r: 14, speed: 0.4, pixelMult: 10, energyMult: 8, mass: 3.0, restitution: 0.5, 
-             cosmicGen: 0.02, tier: 3, special: 'gravitational_pull', unlock: { prestige: 5, cosmicEnergy: 100 } },
+             cosmicGen: 0.02, tier: 3, special: 'gravitational_pull', 
+             clickEffect: 'homing_attack', clickDescription: 'Click to home to nearest ball (unlockable)',
+             unlock: { prestige: 5, cosmicEnergy: 100 } },
     photon: { name: 'Photon Ball', color: '#ffff00', r: 4, speed: 3.0, pixelMult: 0.2, energyMult: 15, mass: 0.1, restitution: 2.0,
-             tier: 3, special: 'light_speed', unlock: { antimatter: 50, lightYears: 10 } },
+             tier: 3, special: 'light_speed', 
+             clickEffect: 'light_burst', clickDescription: 'Click to create blinding light burst affecting all balls',
+             unlock: { antimatter: 50, lightYears: 10 } },
     darkMatter: { name: 'Dark Matter Ball', color: '#2d1b69', r: 16, speed: 0.2, pixelMult: 25, energyMult: 2, mass: 5.0, restitution: 0.3,
-                 darkGen: 0.01, tier: 4, special: 'phase_through', unlock: { prestige: 8, darkEnergy: 500 } },
+                 darkGen: 0.01, tier: 4, special: 'phase_through', 
+                 clickEffect: 'phase_shift', clickDescription: 'Click to phase through walls temporarily',
+                 unlock: { prestige: 8, darkEnergy: 500 } },
     void: { name: 'Void Ball', color: '#000000', r: 20, speed: 0.1, pixelMult: 100, energyMult: 100, mass: 10.0, restitution: 0.1,
-           voidGen: 0.001, tier: 5, special: 'reality_distortion', unlock: { prestige: 12, voidEssence: 10 } },
+           voidGen: 0.001, tier: 5, special: 'reality_distortion', 
+           clickEffect: 'void_warp', clickDescription: 'Click to create reality distortion affecting space-time',
+           unlock: { prestige: 12, voidEssence: 10 } },
     graviton: { name: 'Graviton Ball', color: '#a020f0', r: 8, speed: 2.0, pixelMult: 15, energyMult: 15, mass: 0.5, restitution: 1.8,
-               gravitonGen: 0.05, tier: 4, special: 'space_warp', unlock: { prestige: 10, spaceFabric: 100 } }
+               gravitonGen: 0.05, tier: 4, special: 'space_warp', 
+               clickEffect: 'gravity_well', clickDescription: 'Click to create temporary gravity well',
+               unlock: { prestige: 10, spaceFabric: 100 } }
   };
 
   function createBall(type = 'basic'){
@@ -2290,13 +2322,13 @@
     }
   }
 
-  // Interactive homing system - click on balls to make them home to nearest ball
+  // Interactive ball click system - unique effects for each ball type
   function setupBallInteraction() {
     canvas.addEventListener('click', handleBallClick);
     canvas.addEventListener('touchend', handleBallClick);
     
     function handleBallClick(e) {
-      if (!state.interaction.homingUnlocked || state.interaction.homingCooldown > 0) return;
+      if (state.interaction.cooldown > 0) return; // Global cooldown for all interactions
       
       const rect = canvas.getBoundingClientRect();
       const scaleX = cssW / rect.width;
@@ -2313,46 +2345,195 @@
       
       if (!clickedBall || clickedBall.vitality < 0.2) return; // Need minimum vitality
       
-      // Find nearest other ball
-      let nearestBall = null;
-      let nearestDist = Infinity;
+      // Get ball type info
+      const ballType = BallTypes[clickedBall.type];
+      if (!ballType || !ballType.clickEffect) return;
       
-      for (const ball of state.balls) {
-        if (ball === clickedBall) continue;
-        const dx = ball.x - clickedBall.x;
-        const dy = ball.y - clickedBall.y;
-        const dist = Math.sqrt(dx*dx + dy*dy);
-        if (dist < nearestDist) {
-          nearestDist = dist;
-          nearestBall = ball;
-        }
+      // Execute ball-specific click effect
+      const success = executeBallClickEffect(clickedBall, ballType);
+      
+      if (success) {
+        // Global cooldown and vitality cost
+        state.interaction.cooldown = 30;
+        clickedBall.vitality -= getBallClickCost(clickedBall.type);
+        
+        // Visual feedback
+        clickedBall.color = getClickEffectColor(ballType.clickEffect);
+        setTimeout(() => {
+          clickedBall.color = ballType.color;
+        }, 500);
+        
+        // Track interaction stats
+        state.stats.ballInteractions = (state.stats.ballInteractions || 0) + 1;
+        updateInteractionStats(ballType.clickEffect);
       }
-      
-      if (!nearestBall) return;
-      
-      // Activate homing
-      clickedBall.isHoming = true;
-      clickedBall.homingTarget = nearestBall;
-      clickedBall.vitality -= 0.15; // Cost vitality to activate homing
-      
-      // Update stats and cooldown
-      state.stats.homingClicks++;
-      state.interaction.homingCooldown = 30; // 30 frames cooldown
-      
-      // Visual feedback
-      clickedBall.color = '#ffff00'; // Flash yellow
-      setTimeout(() => {
-        if (clickedBall.type in BallTypes) {
-          clickedBall.color = BallTypes[clickedBall.type].color;
-        }
-      }, 500);
     }
   }
   
-  // Update homing behavior in physics
+  function executeBallClickEffect(ball, ballType) {
+    switch(ballType.clickEffect) {
+      case 'speed_boost':
+        if (state.stats.ballInteractions >= 0) { // Always available for basic balls
+          ball.vx *= 1.5;
+          ball.vy *= 1.5;
+          return true;
+        }
+        break;
+        
+      case 'energy_burst':
+        if (state.stats.totalEnergy >= 100) { // Early unlock
+          state.resources.energy += 50 * ball.vitality;
+          state.stats.totalEnergy += 50 * ball.vitality;
+          return true;
+        }
+        break;
+        
+      case 'quantum_tunnel':
+        if (state.ballTypes.includes('quantum') && state.stats.totalScience >= 500) {
+          ball.x = Math.random() * (cssW - 2*ball.r) + ball.r;
+          ball.y = Math.random() * (cssH - 2*ball.r) + ball.r;
+          state.stats.quantumJumps = (state.stats.quantumJumps || 0) + 1;
+          return true;
+        }
+        break;
+        
+      case 'antimatter_explosion':
+        if (state.ballTypes.includes('antimatter') && state.resources.antimatter >= 1) {
+          // Affect all nearby balls
+          state.balls.forEach(otherBall => {
+            if (otherBall === ball) return;
+            const dx = ball.x - otherBall.x;
+            const dy = ball.y - otherBall.y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            if (dist < 100) {
+              const force = 2.0 * ball.vitality;
+              otherBall.vx += (dx / dist) * force;
+              otherBall.vy += (dy / dist) * force;
+            }
+          });
+          state.resources.antimatter -= 0.1;
+          return true;
+        }
+        break;
+        
+      case 'homing_attack':
+        // Only cosmic balls can use homing, and only when unlocked
+        if (ball.type === 'cosmic' && state.interaction.homingUnlocked) {
+          return executeHomingAttack(ball);
+        }
+        break;
+        
+      case 'light_burst':
+        if (ball.type === 'photon' && state.resources.lightYears >= 1) {
+          // Affect all balls with light burst
+          state.balls.forEach(otherBall => {
+            otherBall.vx *= 1.2;
+            otherBall.vy *= 1.2;
+            otherBall.vitality = Math.min(otherBall.maxVitality, otherBall.vitality + 0.1);
+          });
+          state.resources.lightYears -= 0.5;
+          state.resources.photonEnergy += 10;
+          return true;
+        }
+        break;
+        
+      case 'phase_shift':
+        if (ball.type === 'darkMatter' && state.resources.darkEnergy >= 10) {
+          ball.phaseThrough = true;
+          ball.phaseEndTime = Date.now() + 3000; // 3 seconds
+          state.resources.darkEnergy -= 5;
+          return true;
+        }
+        break;
+        
+      case 'void_warp':
+        if (ball.type === 'void' && state.resources.voidEssence >= 1) {
+          // Reality distortion - teleport and affect nearby balls
+          ball.x = Math.random() * (cssW - 2*ball.r) + ball.r;
+          ball.y = Math.random() * (cssH - 2*ball.r) + ball.r;
+          state.stats.realityBends++;
+          state.resources.voidEssence -= 0.1;
+          state.resources.spaceFabric += 1;
+          return true;
+        }
+        break;
+        
+      case 'gravity_well':
+        if (ball.type === 'graviton' && state.resources.gravitonWaves >= 10) {
+          ball.gravityWellEndTime = Date.now() + 5000; // 5 seconds
+          ball.gravityWellStrength = 0.5;
+          state.resources.gravitonWaves -= 5;
+          return true;
+        }
+        break;
+    }
+    return false;
+  }
+  
+  function executeHomingAttack(ball) {
+    // Find nearest ball
+    let nearestBall = null;
+    let nearestDist = Infinity;
+    
+    for (const otherBall of state.balls) {
+      if (otherBall === ball) continue;
+      const dx = otherBall.x - ball.x;
+      const dy = otherBall.y - ball.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      if (dist < nearestDist) {
+        nearestDist = dist;
+        nearestBall = otherBall;
+      }
+    }
+    
+    if (nearestBall) {
+      ball.isHoming = true;
+      ball.homingTarget = nearestBall;
+      state.stats.homingClicks++;
+      return true;
+    }
+    return false;
+  }
+  
+  function getBallClickCost(ballType) {
+    const costs = {
+      'basic': 0.05,
+      'energy': 0.08,
+      'quantum': 0.12,
+      'antimatter': 0.15,
+      'cosmic': 0.15,
+      'photon': 0.10,
+      'darkMatter': 0.20,
+      'void': 0.25,
+      'graviton': 0.18
+    };
+    return costs[ballType] || 0.1;
+  }
+  
+  function getClickEffectColor(effect) {
+    const colors = {
+      'speed_boost': '#00ff00',
+      'energy_burst': '#00ffff', 
+      'quantum_tunnel': '#ff00ff',
+      'antimatter_explosion': '#ff4444',
+      'homing_attack': '#ffff00',
+      'light_burst': '#ffffff',
+      'phase_shift': '#4400ff',
+      'void_warp': '#000000',
+      'gravity_well': '#8000ff'
+    };
+    return colors[effect] || '#ffffff';
+  }
+  
+  function updateInteractionStats(effect) {
+    const statKey = effect + 'Uses';
+    state.stats[statKey] = (state.stats[statKey] || 0) + 1;
+  }
+  
+  // Update homing behavior in physics - only for cosmic balls
   function updateHomingBalls() {
     state.balls.forEach(ball => {
-      if (ball.isHoming && ball.homingTarget) {
+      if (ball.isHoming && ball.homingTarget && ball.type === 'cosmic') {
         const target = ball.homingTarget;
         const dx = target.x - ball.x;
         const dy = target.y - ball.y;
@@ -2370,11 +2551,36 @@
           ball.homingTarget = null;
         }
       }
+      
+      // Handle phase through effect for dark matter balls
+      if (ball.phaseThrough && ball.phaseEndTime && Date.now() > ball.phaseEndTime) {
+        ball.phaseThrough = false;
+        ball.phaseEndTime = null;
+      }
+      
+      // Handle gravity well effect for graviton balls  
+      if (ball.gravityWellEndTime && Date.now() < ball.gravityWellEndTime) {
+        // Apply gravity well to nearby balls
+        state.balls.forEach(otherBall => {
+          if (otherBall === ball) return;
+          const dx = ball.x - otherBall.x;
+          const dy = ball.y - otherBall.y;
+          const dist = Math.sqrt(dx*dx + dy*dy);
+          if (dist > 0 && dist < 150) {
+            const force = (ball.gravityWellStrength || 0.5) / Math.max(1, dist / 50);
+            otherBall.vx += (dx / dist) * force;
+            otherBall.vy += (dy / dist) * force;
+          }
+        });
+      } else if (ball.gravityWellEndTime && Date.now() >= ball.gravityWellEndTime) {
+        ball.gravityWellEndTime = null;
+        ball.gravityWellStrength = 0;
+      }
     });
     
-    // Reduce cooldown
-    if (state.interaction.homingCooldown > 0) {
-      state.interaction.homingCooldown--;
+    // Reduce global interaction cooldown
+    if (state.interaction.cooldown > 0) {
+      state.interaction.cooldown--;
     }
   }
 

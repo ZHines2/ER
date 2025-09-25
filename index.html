@@ -21,8 +21,30 @@
     button:hover{border-color:var(--accent)}
     button.disabled{opacity:.5;cursor:not-allowed}
     #tests{font-size:12px;color:#9aa0a6;white-space:pre-wrap;margin-top:8px}
-    @media (max-width:720px){ .grid{grid-template-columns:1fr 1fr} button{width:100%;padding:12px 14px;font-size:16px} .title{font-size:16px} .section h2{font-size:12px} }
-    @media (max-width:480px){ .grid{grid-template-columns:1fr} }
+    /* Enhanced mobile compatibility */
+    @media (max-width:720px){ 
+      .grid{grid-template-columns:1fr 1fr} 
+      button{width:100%;padding:12px 14px;font-size:16px;min-height:44px} 
+      .title{font-size:16px} 
+      .section h2{font-size:12px} 
+      .section{padding:8px}
+      .wrap{padding:12px}
+      #gameCanvas{max-width:100%;height:auto}
+    }
+    @media (max-width:480px){ 
+      .grid{grid-template-columns:1fr} 
+      button{font-size:18px;min-height:48px;padding:14px 16px}
+      .section{padding:6px;margin-bottom:8px}
+      .wrap{padding:8px}
+      .progress-modal-content{padding:16px;width:95%}
+      .kv{flex-direction:column;gap:8px}
+    }
+    /* Touch-friendly enhancements */
+    @media (max-width:600px) {
+      .debug-toggle{bottom:20px;right:20px;font-size:18px;padding:12px 16px}
+      .progress-close{font-size:24px;padding:8px 12px}
+      .milestone,.challenge,.meta-upgrade{padding:8px;margin:4px 0;font-size:12px}
+    }
     .milestone{background:#1a1a1a;border-left:3px solid #4af;padding:4px 8px;margin:2px 0;font-size:11px}
     .milestone.completed{border-color:#4f4;color:#9f9}
     .prestige-button{border-color:#f4a !important;color:#f4a}
@@ -375,7 +397,8 @@
     decay:{
       globalDecayRate:1.0, // Global multiplier for all decay rates
       vitalityRecoveryRate:0.0, // Rate at which vitality recovers per collision
-      decayEnabled:true // Whether decay system is active
+      decayEnabled:true, // Whether decay system is active
+      showDecayUI:false // Whether to show detailed decay status (starts hidden)
     }
   };
 
@@ -431,7 +454,8 @@
     // Ball vitality and decay upgrades
     vitalBoost: { name:'vitality boost', cost:{energy:300,science:25}, run(){ state.balls.forEach(b => b.vitality = Math.min(b.maxVitality, b.vitality + 0.2)); this.cost.energy*=1.8; this.cost.science*=1.5; }, visible:()=>state.stats.wallHits>=500},
     decayResistance: { name:'decay resistance', cost:{science:150,pixels:800}, run(){ state.decay.globalDecayRate *= 0.75; this.cost.science*=2; this.cost.pixels*=2; }, visible:()=>state.stats.wallHits>=1000},
-    collisionRecovery: { name:'collision recovery', cost:{science:400,energy:1200}, run(){ state.decay.vitalityRecoveryRate += 0.02; this.cost.science*=2.5; this.cost.energy*=2; }, visible:()=>state.stats.wallHits>=2000}
+    collisionRecovery: { name:'collision recovery', cost:{science:400,energy:1200}, run(){ state.decay.vitalityRecoveryRate += 0.02; this.cost.science*=2.5; this.cost.energy*=2; }, visible:()=>state.stats.wallHits>=2000},
+    decayMonitor: { name:'decay monitor', cost:{science:100,pixels:500}, run(){ state.decay.showDecayUI = true; delete Upgrades.decayMonitor; buildUpgrades(); }, visible:()=>state.stats.wallHits>=300 && !state.decay.showDecayUI}
   };
 
   // Buildings: provide continuous passive resource generation
@@ -1016,17 +1040,19 @@
         html += `<div class="progress-item"><span>Ball Health</span><span>${(avgVitality * 100).toFixed(0)}%</span></div>`;
       }
       
-      // Simplified decay status
-      if(state.decay.decayEnabled) {
-        if(state.decay.globalDecayRate > 1.0) {
-          html += `<div class="progress-item"><span>Decay</span><span>High</span></div>`;
-        } else if(state.decay.globalDecayRate > 0.5) {
-          html += `<div class="progress-item"><span>Decay</span><span>Normal</span></div>`;
-        } else if(state.decay.globalDecayRate > 0) {
-          html += `<div class="progress-item"><span>Decay</span><span>Reduced</span></div>`;
+      // Show detailed decay status only if decay monitor upgrade is purchased
+      if(state.decay.showDecayUI) {
+        if(state.decay.decayEnabled) {
+          if(state.decay.globalDecayRate > 1.0) {
+            html += `<div class="progress-item"><span>Decay</span><span>High</span></div>`;
+          } else if(state.decay.globalDecayRate > 0.5) {
+            html += `<div class="progress-item"><span>Decay</span><span>Normal</span></div>`;
+          } else if(state.decay.globalDecayRate > 0) {
+            html += `<div class="progress-item"><span>Decay</span><span>Reduced</span></div>`;
+          }
+        } else {
+          html += `<div class="progress-item"><span>Decay</span><span>Disabled</span></div>`;
         }
-      } else {
-        html += `<div class="progress-item"><span>Decay</span><span>Disabled</span></div>`;
       }
     }
     
@@ -1599,6 +1625,9 @@
         if(typeof d.decay.decayEnabled === 'boolean') {
           state.decay.decayEnabled = d.decay.decayEnabled;
         }
+        if(typeof d.decay.showDecayUI === 'boolean') {
+          state.decay.showDecayUI = d.decay.showDecayUI;
+        }
       }
       
       // Validate and restore building counts
@@ -1719,7 +1748,7 @@
       state.stats = {totalPixels:0,totalEnergy:0,totalScience:0,ballsSpawned:0,wallHits:0,ballsLost:0};
       state.prestige = {level:0,points:0,unlocks:{}};
       state.milestones = {};
-      state.decay = {globalDecayRate:1.0,vitalityRecoveryRate:0.0,decayEnabled:true};
+      state.decay = {globalDecayRate:1.0,vitalityRecoveryRate:0.0,decayEnabled:true,showDecayUI:false};
       location.reload();
     }
   }

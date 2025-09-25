@@ -334,7 +334,9 @@
            ballInteractions:0,quantumJumps:0,voidInteractions:0,singularitiesControlled:0,
            // Click effect usage tracking
            speed_boostUses:0,energy_burstUses:0,quantum_tunnelUses:0,antimatter_explosionUses:0,
-           homing_attackUses:0,light_burstUses:0,phase_shiftUses:0,void_warpUses:0,gravity_wellUses:0},
+           homing_attackUses:0,light_burstUses:0,phase_shiftUses:0,void_warpUses:0,gravity_wellUses:0,
+           // Missing milestone tracking stats
+           ballTypesUnlocked:1,totalResources:0},
     // New cosmic interaction system
     interaction:{
       homingUnlocked:false,
@@ -403,24 +405,24 @@
     harmonic: { name:'harmonic-sync', cost:{pixels:400,energy:150,science:30}, run(){ state.mul.harmonic=1.4; this.cost.pixels*=3; this.cost.energy*=2; this.cost.science*=2; }},
     
     // Special ball unlocks - require significant progress to unlock
-    sBall:  { name:'energy ball', cost:{energy:500,science:50}, run(){ state.ballTypes.push('energy'); state.balls.push(createBall('energy')); this.cost.energy*=2; this.cost.science*=1.5; }, visible:()=>state.stats.totalScience>=100&&state.stats.totalEnergy>=5000},
-    qBall:  { name:'quantum ball', cost:{science:1500,energy:2000}, run(){ state.ballTypes.push('quantum'); state.balls.push(createBall('quantum')); this.cost.science*=3; this.cost.energy*=2; }, visible:()=>state.stats.totalScience>=500&&state.stats.totalPixels>=25000&&state.prestige.level>=1},
+    sBall:  { name:'energy ball', cost:{energy:500,science:50}, run(){ state.ballTypes.push('energy'); state.balls.push(createBall('energy')); state.stats.ballTypesUnlocked = state.ballTypes.length; this.cost.energy*=2; this.cost.science*=1.5; }, visible:()=>state.stats.totalScience>=100&&state.stats.totalEnergy>=5000},
+    qBall:  { name:'quantum ball', cost:{science:1500,energy:2000}, run(){ state.ballTypes.push('quantum'); state.balls.push(createBall('quantum')); state.stats.ballTypesUnlocked = state.ballTypes.length; this.cost.science*=3; this.cost.energy*=2; }, visible:()=>state.stats.totalScience>=500&&state.stats.totalPixels>=25000&&state.prestige.level>=1},
     
     // Cosmic-tier ball unlocks - require advanced progression
     cosmicBall: { name:'cosmic ball', cost:{antimatter:25,cosmicEnergy:100}, 
-                  run(){ state.ballTypes.push('cosmic'); state.balls.push(createBall('cosmic')); this.cost.antimatter*=3; this.cost.cosmicEnergy*=2; }, 
+                  run(){ state.ballTypes.push('cosmic'); state.balls.push(createBall('cosmic')); state.stats.ballTypesUnlocked = state.ballTypes.length; this.cost.antimatter*=3; this.cost.cosmicEnergy*=2; }, 
                   visible:()=>state.prestige.level>=5&&state.resources.cosmicEnergy>=50},
     photonBall: { name:'photon ball', cost:{lightYears:10,photonEnergy:50}, 
-                  run(){ state.ballTypes.push('photon'); state.balls.push(createBall('photon')); this.cost.lightYears*=2; this.cost.photonEnergy*=3; }, 
+                  run(){ state.ballTypes.push('photon'); state.balls.push(createBall('photon')); state.stats.ballTypesUnlocked = state.ballTypes.length; this.cost.lightYears*=2; this.cost.photonEnergy*=3; }, 
                   visible:()=>state.resources.lightYears>=5&&state.stats.cosmicCollisions>=1000},
     darkMatterBall: { name:'dark matter ball', cost:{darkEnergy:500,darkMatterFuel:100}, 
-                      run(){ state.ballTypes.push('darkMatter'); state.balls.push(createBall('darkMatter')); this.cost.darkEnergy*=2; this.cost.darkMatterFuel*=4; }, 
+                      run(){ state.ballTypes.push('darkMatter'); state.balls.push(createBall('darkMatter')); state.stats.ballTypesUnlocked = state.ballTypes.length; this.cost.darkEnergy*=2; this.cost.darkMatterFuel*=4; }, 
                       visible:()=>state.prestige.level>=8&&state.resources.darkEnergy>=200},
     voidBall: { name:'void ball', cost:{voidEssence:10,spaceFabric:50}, 
-                run(){ state.ballTypes.push('void'); state.balls.push(createBall('void')); this.cost.voidEssence*=5; this.cost.spaceFabric*=3; }, 
+                run(){ state.ballTypes.push('void'); state.balls.push(createBall('void')); state.stats.ballTypesUnlocked = state.ballTypes.length; this.cost.voidEssence*=5; this.cost.spaceFabric*=3; }, 
                 visible:()=>state.prestige.level>=12&&state.stats.realityBends>=100},
     gravitonBall: { name:'graviton ball', cost:{gravitonWaves:100,spaceFabric:100}, 
-                    run(){ state.ballTypes.push('graviton'); state.balls.push(createBall('graviton')); this.cost.gravitonWaves*=3; this.cost.spaceFabric*=2; }, 
+                    run(){ state.ballTypes.push('graviton'); state.balls.push(createBall('graviton')); state.stats.ballTypesUnlocked = state.ballTypes.length; this.cost.gravitonWaves*=3; this.cost.spaceFabric*=2; }, 
                     visible:()=>state.prestige.level>=10&&state.resources.gravitonWaves>=50},
     
     // Interactive cosmic systems - Homing specific to cosmic balls
@@ -1158,7 +1160,16 @@
   }
   function buildMilestones(){ const root=document.getElementById('milestones'); if(!root) return; root.innerHTML='';
     for(const [k,m] of Object.entries(Milestones)){
-      const progress = state.stats[m.stat] || 0;
+      // Check both stats and resources for milestone progress
+      let progress = state.stats[m.stat] || 0;
+      if(progress === 0) {
+        progress = state.resources[m.stat] || 0;
+      }
+      // Special case for prestige level
+      if(m.stat === 'level') {
+        progress = state.prestige.level || 0;
+      }
+      
       const completed = progress >= m.threshold;
       if(completed && !m.completed){ 
         m.completed = true; 
@@ -1185,6 +1196,10 @@
     } else {
       for(const [k,c] of Object.entries(Challenges)){
         if(state.challengesCompleted[k]) continue;
+        
+        // Check unlock requirements for cosmic challenges
+        if(c.unlock && !c.unlock()) continue;
+        
         const div = document.createElement('div');
         div.className = `challenge ${state.challengesCompleted[k] ? 'completed' : ''}`;
         div.innerHTML = `<strong>${c.name}</strong><br>${c.desc}<br>Goal: ${c.goal}<br>Reward: ${c.reward}`;
@@ -1585,6 +1600,7 @@
           state.resources.energy += eGain;
           state.stats.totalPixels += pGain;
           state.stats.totalEnergy += eGain;
+          state.stats.totalResources += pGain + eGain;
         }
         else if(hitV||hitH){ 
           const pGain = 1*ballType.pixelMult*state.mul.pixel*totalResourceMult*earlyGameRampUp;
@@ -1593,14 +1609,19 @@
           state.resources.energy += eGain;
           state.stats.totalPixels += pGain;
           state.stats.totalEnergy += eGain;
+          state.stats.totalResources += pGain + eGain;
         }
         
         // Special ball effects
         if(ballType.quantumGen && Math.random() < 0.1){
-          state.resources.quantum += ballType.quantumGen * totalResourceMult;
+          const qGain = ballType.quantumGen * totalResourceMult;
+          state.resources.quantum += qGain;
+          state.stats.totalResources += qGain;
         }
         if(ballType.antimatterGen && Math.random() < 0.05){
-          state.resources.antimatter += ballType.antimatterGen * totalResourceMult;
+          const aGain = ballType.antimatterGen * totalResourceMult;
+          state.resources.antimatter += aGain;
+          state.stats.totalResources += aGain;
         }
       }
     }
@@ -1710,6 +1731,7 @@
             const scienceGain = 0.5 * (state.mul.science || 1) * resourceMult * scienceMultiplier;
             state.resources.science += scienceGain;
             state.stats.totalScience += scienceGain;
+            state.stats.totalResources += scienceGain;
             
             // Higher energy collisions trigger more visual effects
             if(Math.random() < (0.5 + energyIntensity * 0.3)) triggerCollisionEffect();
@@ -1781,10 +1803,26 @@
       }
       
       // Generate cosmic resources based on ball type
-      if (ballType.cosmicGen) state.resources.cosmicEnergy += ballType.cosmicGen * ball.vitality;
-      if (ballType.darkGen) state.resources.darkEnergy += ballType.darkGen * ball.vitality;
-      if (ballType.voidGen) state.resources.voidEssence += ballType.voidGen * ball.vitality;
-      if (ballType.gravitonGen) state.resources.gravitonWaves += ballType.gravitonGen * ball.vitality;
+      if (ballType.cosmicGen) {
+        const cGain = ballType.cosmicGen * ball.vitality;
+        state.resources.cosmicEnergy += cGain;
+        state.stats.totalResources += cGain;
+      }
+      if (ballType.darkGen) {
+        const dGain = ballType.darkGen * ball.vitality;
+        state.resources.darkEnergy += dGain;
+        state.stats.totalResources += dGain;
+      }
+      if (ballType.voidGen) {
+        const vGain = ballType.voidGen * ball.vitality;
+        state.resources.voidEssence += vGain;
+        state.stats.totalResources += vGain;
+      }
+      if (ballType.gravitonGen) {
+        const gGain = ballType.gravitonGen * ball.vitality;
+        state.resources.gravitonWaves += gGain;
+        state.stats.totalResources += gGain;
+      }
     });
   }
   
@@ -1812,7 +1850,9 @@
     ball.vy *= speedBoost;
     
     // Generate light years resource
-    state.resources.lightYears += 0.1 * ball.vitality;
+    const lyGain = 0.1 * ball.vitality;
+    state.resources.lightYears += lyGain;
+    state.stats.totalResources += lyGain;
   }
   
   function updateDarkMatterBallSpecial(ball) {
@@ -1824,7 +1864,9 @@
     
     // Generate dark matter fuel
     if (ball.cosmicEnergy > 300) {
-      state.resources.darkMatterFuel += 0.05 * ball.vitality;
+      const dmfGain = 0.05 * ball.vitality;
+      state.resources.darkMatterFuel += dmfGain;
+      state.stats.totalResources += dmfGain;
     }
   }
   
@@ -1838,7 +1880,9 @@
       ball.y = Math.random() * (cssH - 2*ball.r) + ball.r;
       
       // Generate void essence
-      state.resources.voidEssence += 0.1;
+      const veGain = 0.1;
+      state.resources.voidEssence += veGain;
+      state.stats.totalResources += veGain;
     }
   }
   
@@ -1860,7 +1904,9 @@
       });
       
       // Generate space fabric
-      state.resources.spaceFabric += 0.2 * ball.vitality;
+      const sfGain = 0.2 * ball.vitality;
+      state.resources.spaceFabric += sfGain;
+      state.stats.totalResources += sfGain;
     }
   }
 
@@ -2019,6 +2065,8 @@
             if(k==='pixels') state.stats.totalPixels += gain;
             if(k==='energy') state.stats.totalEnergy += gain; 
             if(k==='science') state.stats.totalScience += gain;
+            // Track total resources across all types for milestone
+            state.stats.totalResources += gain;
           }
         }
       } 

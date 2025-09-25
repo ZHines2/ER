@@ -32,28 +32,45 @@
     .challenge.completed{border-color:#4f4;color:#9f9}
     .meta-upgrade{background:#1a1a2a;border-left:3px solid #44f;padding:4px 8px;margin:2px 0;font-size:11px}
     
-    /* Collision Effects */
+    /* Collision Effects - Enhanced */
     @keyframes screenShake {
       0%, 100% { transform: translate(0, 0); }
-      25% { transform: translate(-2px, 1px); }
-      50% { transform: translate(1px, -2px); }
-      75% { transform: translate(-1px, 2px); }
+      10% { transform: translate(-3px, 2px); }
+      20% { transform: translate(3px, -2px); }
+      30% { transform: translate(-2px, 3px); }
+      40% { transform: translate(2px, -1px); }
+      50% { transform: translate(-1px, 2px); }
+      60% { transform: translate(1px, -3px); }
+      70% { transform: translate(-2px, 1px); }
+      80% { transform: translate(2px, -2px); }
+      90% { transform: translate(-1px, 1px); }
     }
     @keyframes collision-flash {
       0% { background: var(--panel); }
-      50% { background: rgba(255, 255, 255, 0.1); }
+      25% { background: rgba(255, 255, 255, 0.15); }
+      50% { background: rgba(64, 175, 255, 0.1); }
+      75% { background: rgba(255, 255, 255, 0.1); }
       100% { background: var(--panel); }
     }
     @keyframes collision-pulse {
-      0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.3); }
-      70% { box-shadow: 0 0 0 10px rgba(255, 255, 255, 0); }
-      100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
+      0% { 
+        box-shadow: 0 0 0 0 rgba(64, 175, 255, 0.4); 
+        border-color: var(--border);
+      }
+      50% { 
+        box-shadow: 0 0 0 15px rgba(64, 175, 255, 0); 
+        border-color: rgba(64, 175, 255, 0.8);
+      }
+      100% { 
+        box-shadow: 0 0 0 0 rgba(64, 175, 255, 0); 
+        border-color: var(--border);
+      }
     }
     .collision-effect {
-      animation: collision-flash 0.2s ease-out, collision-pulse 0.5s ease-out;
+      animation: collision-flash 0.3s ease-out, collision-pulse 0.6s ease-out;
     }
     .screen-shake {
-      animation: screenShake 0.3s ease-out;
+      animation: screenShake 0.4s ease-out;
     }
     
     /* Progress Modal Styles */
@@ -139,6 +156,77 @@
       cursor: pointer;
       padding: 4px;
     }
+    
+    /* Debug Menu Styles */
+    .debug-menu {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      background: var(--panel);
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      max-width: 300px;
+      z-index: 2000;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+    }
+    .debug-menu.active {
+      opacity: 1;
+      pointer-events: all;
+    }
+    .debug-menu h4 {
+      margin: 0 0 12px 0;
+      color: var(--accent);
+      font-size: 14px;
+    }
+    .debug-section {
+      margin: 12px 0;
+      padding: 8px;
+      background: rgba(255, 255, 255, 0.02);
+      border-radius: 4px;
+    }
+    .debug-section h5 {
+      margin: 0 0 8px 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .debug-input {
+      width: 60px;
+      background: var(--bg);
+      color: var(--ink);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 4px 6px;
+      font-size: 11px;
+      font-family: inherit;
+      margin-right: 4px;
+    }
+    .debug-button {
+      padding: 4px 8px !important;
+      font-size: 11px !important;
+      margin: 2px !important;
+      min-width: auto !important;
+    }
+    .debug-toggle {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      background: rgba(0, 0, 0, 0.8);
+      color: var(--accent);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 6px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      z-index: 2001;
+      font-family: inherit;
+    }
+    .debug-toggle:hover {
+      background: var(--panel);
+    }
   </style>
 </head>
 <body>
@@ -202,6 +290,62 @@
       <button class="progress-close" onclick="closeProgressModal()">&times;</button>
       <h3>// progression tracker</h3>
       <div id="progressContent"></div>
+    </div>
+  </div>
+
+  <!-- Debug Menu -->
+  <button class="debug-toggle" onclick="toggleDebugMenu()">debug</button>
+  <div id="debugMenu" class="debug-menu">
+    <h4>// debug console</h4>
+    
+    <div class="debug-section">
+      <h5>Resources</h5>
+      <div>
+        <input type="number" id="debugPixels" class="debug-input" placeholder="0" />
+        <button class="debug-button" onclick="setResource('pixels')">pixels</button>
+        <input type="number" id="debugEnergy" class="debug-input" placeholder="0" />
+        <button class="debug-button" onclick="setResource('energy')">energy</button>
+      </div>
+      <div style="margin-top:4px;">
+        <input type="number" id="debugScience" class="debug-input" placeholder="0" />
+        <button class="debug-button" onclick="setResource('science')">science</button>
+        <input type="number" id="debugQuantum" class="debug-input" placeholder="0" />
+        <button class="debug-button" onclick="setResource('quantum')">quantum</button>
+      </div>
+    </div>
+    
+    <div class="debug-section">
+      <h5>Game State</h5>
+      <div>
+        <button class="debug-button" onclick="debugSpeedUp()">speed x10</button>
+        <button class="debug-button" onclick="debugAddBalls()">+5 balls</button>
+      </div>
+      <div style="margin-top:4px;">
+        <button class="debug-button" onclick="debugUnlockAll()">unlock all</button>
+        <button class="debug-button" onclick="debugResetGame()">reset</button>
+      </div>
+    </div>
+    
+    <div class="debug-section">
+      <h5>Prestige</h5>
+      <div>
+        <input type="number" id="debugPrestigeLevel" class="debug-input" placeholder="0" />
+        <button class="debug-button" onclick="setPrestigeLevel()">level</button>
+        <input type="number" id="debugPrestigePoints" class="debug-input" placeholder="0" />
+        <button class="debug-button" onclick="setPrestigePoints()">points</button>
+      </div>
+    </div>
+    
+    <div class="debug-section">
+      <h5>Quick States</h5>
+      <div>
+        <button class="debug-button" onclick="debugEarlyGame()">early game</button>
+        <button class="debug-button" onclick="debugMidGame()">mid game</button>
+      </div>
+      <div style="margin-top:4px;">
+        <button class="debug-button" onclick="debugLateGame()">late game</button>
+        <button class="debug-button" onclick="debugEndGame()">end game</button>
+      </div>
     </div>
   </div>
 
@@ -708,12 +852,12 @@
   function triggerCollisionEffect() {
     const canvas = document.getElementById('gameCanvas');
     canvas.classList.add('collision-effect');
-    setTimeout(() => canvas.classList.remove('collision-effect'), 200);
+    setTimeout(() => canvas.classList.remove('collision-effect'), 300);
     
-    // Add screen shake occasionally for more impactful collisions
-    if (Math.random() < 0.3) {
+    // Add screen shake more frequently for better feedback
+    if (Math.random() < 0.4) {
       document.body.classList.add('screen-shake');
-      setTimeout(() => document.body.classList.remove('screen-shake'), 300);
+      setTimeout(() => document.body.classList.remove('screen-shake'), 400);
     }
   }
 
@@ -734,17 +878,31 @@
   function generateProgressContent() {
     let html = '';
     
+    // Game Overview
+    html += '<div class="progress-section">';
+    html += '<h4>Current Status</h4>';
+    const totalBuildings = Object.values(Buildings).reduce((sum, b) => sum + b.n, 0);
+    const completedMilestones = Object.values(Milestones).filter(m => m.completed).length;
+    const totalResearch = Object.keys(Research).length - Object.values(Research).length; // purchased research
+    html += `<div class="progress-item"><span>Total Buildings</span><span>${totalBuildings}</span></div>`;
+    html += `<div class="progress-item"><span>Completed Milestones</span><span>${completedMilestones}/${Object.keys(Milestones).length}</span></div>`;
+    html += `<div class="progress-item"><span>Ball Types Unlocked</span><span>${state.ballTypes.length}</span></div>`;
+    if(state.prestige.level > 0) {
+      html += `<div class="progress-item"><span>Prestige Level</span><span>${state.prestige.level}</span></div>`;
+    }
+    html += '</div>';
+    
     // Resource Progress
     html += '<div class="progress-section">';
     html += '<h4>Resource Milestones</h4>';
     const resourceGoals = [
-      {name: 'Pixels', current: state.stats.totalPixels, goals: [100, 1000, 10000, 100000]},
-      {name: 'Energy', current: state.stats.totalEnergy, goals: [50, 500, 5000, 50000]},
-      {name: 'Science', current: state.stats.totalScience, goals: [10, 100, 500, 1000]}
+      {name: 'Pixels', current: state.stats.totalPixels, goals: [100, 1000, 10000, 50000, 100000]},
+      {name: 'Energy', current: state.stats.totalEnergy, goals: [50, 500, 5000, 25000, 50000]},
+      {name: 'Science', current: state.stats.totalScience, goals: [10, 100, 500, 1000, 2000]}
     ];
     
     resourceGoals.forEach(res => {
-      html += `<div class="progress-item"><strong>${res.name}</strong></div>`;
+      html += `<div class="progress-item"><strong>${res.name} (${res.current.toFixed(0)})</strong></div>`;
       res.goals.forEach(goal => {
         const progress = Math.min(100, (res.current / goal) * 100);
         const completed = res.current >= goal;
@@ -757,44 +915,37 @@
     });
     html += '</div>';
     
-    // Unlock Progress
+    // Unlock Progress - Enhanced
     html += '<div class="progress-section">';
-    html += '<h4>Unlock Progress</h4>';
+    html += '<h4>Feature Unlocks</h4>';
     
     const unlocks = [
-      {name: 'Energy Ball', unlocked: state.ballTypes.includes('energy'), req: 'Science: 100, Energy: 5000'},
-      {name: 'Quantum Content', unlocked: state.stats.totalScience>=1000&&state.stats.totalPixels>=50000&&state.prestige.level>=1, req: 'Science: 1000, Pixels: 50000, Prestige: 1'},
-      {name: 'Prestige System', unlocked: state.prestige.unlocked, req: 'Science: 800, Pixels: 100000'},
-      {name: 'Intermediate Buildings', unlocked: state.stats.totalPixels>=1000, req: 'Pixels: 1000'},
-      {name: 'Advanced Research', unlocked: state.stats.totalScience>=150, req: 'Science: 150'}
+      {name: 'Intermediate Buildings', unlocked: state.stats.totalPixels>=1000, req: 'Pixels: 1,000', desc: 'Amplifier, Conduit, Synthesizer, Resonator'},
+      {name: 'Advanced Research', unlocked: state.stats.totalScience>=150, req: 'Science: 150', desc: 'Momentum, Harmonics, Field Theory'},
+      {name: 'Energy Ball', unlocked: state.ballTypes.includes('energy'), req: 'Science: 100, Energy: 5,000', desc: 'Energy-focused ball type'},
+      {name: 'Quantum Content', unlocked: state.stats.totalScience>=1000&&state.stats.totalPixels>=50000&&state.prestige.level>=1, req: 'Science: 1,000, Pixels: 50,000, Prestige: 1', desc: 'Quantum balls and buildings'},
+      {name: 'Prestige System', unlocked: state.prestige.unlocked, req: 'Science: 800, Pixels: 100,000', desc: 'Meta-progression system'}
     ];
     
     unlocks.forEach(unlock => {
       html += `<div class="progress-item ${unlock.unlocked?'completed':''}">`;
-      html += `<span>${unlock.name}</span>`;
-      html += `<span>${unlock.unlocked ? '✓' : '✗'}</span>`;
+      html += `<div><strong>${unlock.name}</strong> ${unlock.unlocked ? '✓' : '✗'}</div>`;
       html += `</div>`;
-      html += `<div style="font-size:10px;color:var(--muted);margin-bottom:8px;">${unlock.req}</div>`;
+      html += `<div style="font-size:10px;color:var(--muted);margin:4px 0;">${unlock.desc}</div>`;
+      html += `<div style="font-size:10px;color:${unlock.unlocked?'#4f4':'var(--muted)'};margin-bottom:12px;">${unlock.req}</div>`;
     });
     html += '</div>';
     
-    // Building Progress
+    // Statistics
     html += '<div class="progress-section">';
-    html += '<h4>Building Count</h4>';
-    const totalBuildings = Object.values(Buildings).reduce((sum, b) => sum + b.n, 0);
-    html += `<div class="progress-item">`;
-    html += `<span>Total Buildings</span>`;
-    html += `<span>${totalBuildings}</span>`;
-    html += `</div>`;
-    
-    Object.entries(Buildings).forEach(([key, bld]) => {
-      if(bld.n > 0 || (bld.visible && bld.visible())) {
-        html += `<div class="progress-item">`;
-        html += `<span>${bld.name}</span>`;
-        html += `<span>${bld.n}</span>`;
-        html += `</div>`;
-      }
-    });
+    html += '<h4>Statistics</h4>';
+    html += `<div class="progress-item"><span>Wall Hits</span><span>${state.stats.wallHits.toLocaleString()}</span></div>`;
+    html += `<div class="progress-item"><span>Balls Spawned</span><span>${state.stats.ballsSpawned}</span></div>`;
+    html += `<div class="progress-item"><span>Active Balls</span><span>${state.balls.length}</span></div>`;
+    if(state.challengesCompleted && Object.keys(state.challengesCompleted).length > 0) {
+      const completed = Object.keys(state.challengesCompleted).filter(k => state.challengesCompleted[k]).length;
+      html += `<div class="progress-item"><span>Challenges Completed</span><span>${completed}</span></div>`;
+    }
     html += '</div>';
     
     return html;
@@ -1108,6 +1259,118 @@
     const b=state.balls[0]; ok('ball still in bounds', b.x>=b.r && b.x<=cssW-b.r && b.y>=b.r && b.y<=cssH-b.r);
     document.getElementById('tests').textContent = out.join('\n');
     console.log(out.join('\n'));
+  }
+
+  // ---------- debug menu ----------
+  function toggleDebugMenu() {
+    const menu = document.getElementById('debugMenu');
+    menu.classList.toggle('active');
+  }
+  
+  function setResource(type) {
+    const input = document.getElementById('debug' + type.charAt(0).toUpperCase() + type.slice(1));
+    const value = parseFloat(input.value) || 0;
+    state.resources[type] = value;
+    refresh();
+    console.log(`Set ${type} to ${value}`);
+  }
+  
+  function debugSpeedUp() {
+    state.balls.forEach(b => {
+      b.vx *= 10;
+      b.vy *= 10;
+    });
+    console.log('Applied speed x10 to all balls');
+  }
+  
+  function debugAddBalls() {
+    for(let i = 0; i < 5; i++) {
+      state.balls.push(createBall());
+    }
+    console.log('Added 5 balls');
+  }
+  
+  function debugUnlockAll() {
+    // Unlock prestige
+    state.prestige.unlocked = true;
+    state.prestige.level = 3;
+    state.prestige.points = 100;
+    
+    // Unlock ball types
+    if(!state.ballTypes.includes('energy')) state.ballTypes.push('energy');
+    if(!state.ballTypes.includes('quantum')) state.ballTypes.push('quantum');
+    if(!state.ballTypes.includes('antimatter')) state.ballTypes.push('antimatter');
+    
+    // Set high stats to unlock everything
+    state.stats.totalPixels = 200000;
+    state.stats.totalEnergy = 100000;
+    state.stats.totalScience = 2000;
+    
+    updatePrestige();
+    refresh(true);
+    console.log('Unlocked all features');
+  }
+  
+  function debugResetGame() {
+    if(confirm('Reset game state?')) {
+      localStorage.removeItem('tty_idle_save');
+      location.reload();
+    }
+  }
+  
+  function setPrestigeLevel() {
+    const input = document.getElementById('debugPrestigeLevel');
+    const value = parseInt(input.value) || 0;
+    state.prestige.level = value;
+    updatePrestige();
+    refresh(true);
+    console.log(`Set prestige level to ${value}`);
+  }
+  
+  function setPrestigePoints() {
+    const input = document.getElementById('debugPrestigePoints');
+    const value = parseInt(input.value) || 0;
+    state.prestige.points = value;
+    refresh();
+    console.log(`Set prestige points to ${value}`);
+  }
+  
+  function debugEarlyGame() {
+    state.resources = {pixels:500, energy:300, science:10, quantum:0, antimatter:0};
+    state.stats = {totalPixels:500, totalEnergy:300, totalScience:10, ballsSpawned:5, wallHits:50};
+    refresh();
+    console.log('Set early game state');
+  }
+  
+  function debugMidGame() {
+    state.resources = {pixels:5000, energy:3000, science:200, quantum:1, antimatter:0};
+    state.stats = {totalPixels:15000, totalEnergy:8000, totalScience:500, ballsSpawned:20, wallHits:500};
+    state.prestige.level = 1;
+    if(!state.ballTypes.includes('energy')) state.ballTypes.push('energy');
+    updatePrestige();
+    refresh(true);
+    console.log('Set mid game state');
+  }
+  
+  function debugLateGame() {
+    state.resources = {pixels:50000, energy:25000, science:1500, quantum:20, antimatter:2};
+    state.stats = {totalPixels:150000, totalEnergy:80000, totalScience:2000, ballsSpawned:50, wallHits:2000};
+    state.prestige = {level:2, points:50, unlocked:true, unlocks:{}};
+    if(!state.ballTypes.includes('energy')) state.ballTypes.push('energy');
+    if(!state.ballTypes.includes('quantum')) state.ballTypes.push('quantum');
+    updatePrestige();
+    refresh(true);
+    console.log('Set late game state');
+  }
+  
+  function debugEndGame() {
+    state.resources = {pixels:500000, energy:250000, science:10000, quantum:500, antimatter:100};
+    state.stats = {totalPixels:1000000, totalEnergy:500000, totalScience:15000, ballsSpawned:100, wallHits:10000};
+    state.prestige = {level:5, points:500, unlocked:true, unlocks:{}};
+    state.ballTypes = ['basic', 'energy', 'quantum', 'antimatter'];
+    updatePrestige();
+    refresh(true);
+    console.log('Set end game state');
   }
 
   // ---------- boot ----------

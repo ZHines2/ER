@@ -224,7 +224,7 @@
         <div style="margin-top:8px;">
           <button onclick="openProgressModal()" style="font-size:12px;padding:4px 8px;" class="tooltip" data-tooltip="View detailed progression tracking and unlock requirements">view progress</button>
           <button onclick="fullReset()" style="font-size:12px;padding:4px 8px;margin-left:8px;color:#f44;border-color:#f44;" title="Complete game reset" class="tooltip" data-tooltip="Reset everything to start over completely">reset game</button>
-          <button onclick="DebugSystem.performGenesisReset()" style="font-size:12px;padding:4px 8px;margin-left:8px;color:#fa4;border-color:#fa4;" class="tooltip" data-tooltip="Ultimate reset: Lose everything but gain permanent speed and resource bonuses based on prestige level">genesis reset</button>
+          <button id="genesisResetButton" onclick="DebugSystem.performGenesisReset()" style="font-size:12px;padding:4px 8px;margin-left:8px;color:#fa4;border-color:#fa4;display:none;" class="tooltip" data-tooltip="Ultimate reset: Lose everything but gain permanent speed and resource bonuses based on prestige level">genesis reset</button>
         </div>
         <div id="prestigeInfo" class="mono" style="display:none;margin-top:8px;color:#f4a">
           prestige lvl: <span id="prestigeLevel">0</span> | points: <span id="prestigePoints">0</span>
@@ -969,6 +969,13 @@
       }
     }
     
+    // Update Genesis reset button visibility - unlock after significant late-game progress
+    const genesisButton = document.getElementById('genesisResetButton');
+    const canUnlockGenesis = state.prestige.level >= 3 && state.stats.wallHits >= 10000 && (state.resources.antimatter >= 5 || state.prestige.genesis);
+    if(genesisButton) {
+      genesisButton.style.display = canUnlockGenesis ? 'inline-block' : 'none';
+    }
+    
     if(rebuild){ buildUpgrades(); buildBuildings(); buildResearch(); buildPrestige(); buildMilestones(); buildChallenges(); buildMetaUpgrades(); }
     updateAfford();
   }
@@ -1051,7 +1058,8 @@
       {name: 'Advanced Research', unlocked: state.stats.totalScience>=150, req: 'Science: 150', desc: 'Momentum, Harmonics, Field Theory'},
       {name: 'Energy Ball', unlocked: state.ballTypes.includes('energy'), req: 'Science: 100, Energy: 5,000', desc: 'Energy-focused ball type'},
       {name: 'Quantum Content', unlocked: state.stats.totalScience>=1000&&state.stats.totalPixels>=50000&&state.prestige.level>=1, req: 'Science: 1,000, Pixels: 50,000, Prestige: 1', desc: 'Quantum balls and buildings'},
-      {name: 'Prestige System', unlocked: state.prestige.unlocked, req: 'Science: 800, Pixels: 100,000', desc: 'Meta-progression system'}
+      {name: 'Prestige System', unlocked: state.prestige.unlocked, req: 'Science: 800, Pixels: 100,000', desc: 'Meta-progression system'},
+      {name: 'Genesis Reset', unlocked: state.prestige.level >= 3 && state.stats.wallHits >= 10000 && (state.resources.antimatter >= 5 || state.prestige.genesis), req: 'Prestige: 3, Wall Hits: 10,000, Antimatter: 5', desc: 'Ultimate reset with permanent bonuses'}
     ];
     
     unlocks.forEach(unlock => {

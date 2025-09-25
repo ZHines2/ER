@@ -416,13 +416,13 @@
     entanglement: { name:'entanglement-prep', cost:{science:800,energy:2000}, toggleable:true, active:false, run(){ this.active=!this.active; if(!this.toggleable) delete Research.entanglement; buildResearch(); }, visible:()=>state.stats.totalScience>=600 },
     
     // Advanced research - require prestige level and significant resources
-    quantumTheory: { name:'quantum-theory', cost:{science:1500,energy:3000}, run(){ state.mul.quantum=2; delete Research.quantumTheory; buildResearch(); }, visible:()=>state.stats.totalScience>=1000&&state.prestige.level>=1 },
-    timeAccel: { name:'time-acceleration', cost:{antimatter:1,quantum:10}, run(){ state.mul.timeScale=1.5; delete Research.timeAccel; buildResearch(); }, visible:()=>state.prestige.level>=2 },
-    prestigeUnlock: { name:'enable-prestige', cost:{science:2000,energy:5000}, run(){ state.prestige.unlocked=true; delete Research.prestigeUnlock; buildResearch(); updatePrestige(); }, visible:()=>!state.prestige.unlocked&&state.stats.totalPixels>=100000&&state.stats.totalScience>=800 },
+    quantumTheory: { name:'quantum-theory', cost:{science:1500,energy:3000}, toggleable:false, run(){ state.mul.quantum=2; delete Research.quantumTheory; buildResearch(); }, visible:()=>state.stats.totalScience>=1000&&state.prestige.level>=1 },
+    timeAccel: { name:'time-acceleration', cost:{antimatter:1,quantum:10}, toggleable:false, run(){ state.mul.timeScale=1.5; delete Research.timeAccel; buildResearch(); }, visible:()=>state.prestige.level>=2 },
+    prestigeUnlock: { name:'enable-prestige', cost:{science:2000,energy:5000}, toggleable:false, run(){ state.prestige.unlocked=true; delete Research.prestigeUnlock; buildResearch(); updatePrestige(); }, visible:()=>!state.prestige.unlocked&&state.stats.totalPixels>=100000&&state.stats.totalScience>=800 },
     
     // Ball vitality research
-    vitalityTheory: { name:'vitality theory', cost:{science:350,energy:1000}, run(){ state.balls.forEach(b => { b.maxVitality = 1.2; if(b.vitality > 1.0) b.vitality = Math.min(b.maxVitality, b.vitality); }); delete Research.vitalityTheory; buildResearch(); }, visible:()=>state.stats.wallHits>=1200 },
-    decayNullification: { name:'decay nullification', cost:{quantum:15,antimatter:1}, run(){ state.decay.decayEnabled = false; delete Research.decayNullification; buildResearch(); }, visible:()=>state.prestige.level>=2 && state.stats.wallHits>=5000 }
+    vitalityTheory: { name:'vitality theory', cost:{science:350,energy:1000}, toggleable:false, run(){ state.balls.forEach(b => { b.maxVitality = 1.2; if(b.vitality > 1.0) b.vitality = Math.min(b.maxVitality, b.vitality); }); delete Research.vitalityTheory; buildResearch(); }, visible:()=>state.stats.wallHits>=1200 },
+    decayNullification: { name:'decay nullification', cost:{quantum:15,antimatter:1}, toggleable:false, run(){ state.decay.decayEnabled = false; delete Research.decayNullification; buildResearch(); }, visible:()=>state.prestige.level>=2 && state.stats.wallHits>=5000 }
   };
 
   const Milestones = {
@@ -793,25 +793,30 @@
     for(const [k,r] of Object.entries(Research)){
       if(r.visible && !r.visible()) continue;
       let buttonText = r.name;
-      if(r.toggleable) {
+      
+      if(r.purchased && r.toggleable) {
         buttonText += r.active ? ' [ON]' : ' [OFF]';
-      }
-      if(!r.purchased) {
+      } else if(!r.purchased) {
         buttonText += `  [${costStr(r.cost)}]`;
       }
+      
       const b=line(buttonText,`r_${k}`);
       b.onclick=()=>{ 
         if(!r.purchased && can(r.cost)){ 
           pay(r.cost); 
           r.purchased = true;
+          if(r.toggleable) r.active = false; // Start toggleable research as OFF
         }
-        if(r.purchased) {
-          r.run(); 
+        if(r.purchased && r.toggleable) {
+          r.run(); // Toggle the research
           refresh(true); 
+        } else if(r.purchased && !r.toggleable) {
+          r.run(); // Run one-time research
+          refresh(true);
         }
       };
       b.disabled = !r.purchased && !can(r.cost);
-      if(r.toggleable && r.active) {
+      if(r.toggleable && r.active && r.purchased) {
         b.style.background = '#2a4a2a';
         b.style.borderColor = '#4f4';
       }
@@ -1582,7 +1587,10 @@
         lastSave:state.lastSave,
         metaUpgrades:Object.fromEntries(Object.entries(MetaUpgrades).map(([k,v])=>[k,{level:v.level}])),
         // New decay system data
-        decay:state.decay
+        decay:state.decay,
+        // Research purchase states
+        researchPurchased:Object.fromEntries(Object.entries(Research).map(([k,v])=>[k,!!v.purchased])),
+        researchActive:Object.fromEntries(Object.entries(Research).filter(([k,v])=>v.toggleable).map(([k,v])=>[k,!!v.active]))
       };
       localStorage.setItem('tty_idle_save', JSON.stringify(saveData));
     }catch(e){
@@ -1628,6 +1636,22 @@
       if(d.automation && typeof d.automation === 'object') Object.assign(state.automation,d.automation);
       if(d.ballTypes && Array.isArray(d.ballTypes)) {
         state.ballTypes = d.ballTypes.filter(type => BallTypes[type]); // Only valid ball types
+      }
+      
+      // Restore research purchase states
+      if(d.researchPurchased && typeof d.researchPurchased === 'object') {
+        for(const [k,purchased] of Object.entries(d.researchPurchased)) {
+          if(Research[k] && typeof purchased === 'boolean') {
+            Research[k].purchased = purchased;
+          }
+        }
+      }
+      if(d.researchActive && typeof d.researchActive === 'object') {
+        for(const [k,active] of Object.entries(d.researchActive)) {
+          if(Research[k] && Research[k].toggleable && typeof active === 'boolean') {
+            Research[k].active = active;
+          }
+        }
       }
       if(d.stats && typeof d.stats === 'object') {
         for(const [k,v] of Object.entries(d.stats)) {

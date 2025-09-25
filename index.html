@@ -6,7 +6,8 @@
   <title>ɚ</title>
   <style>
     :root{ --bg:#0a0a0a; --ink:#e6e6e6; --muted:#9aa0a6; --accent:#fff; --panel:#111; --border:#444; }
-    html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font:14px/1.35 ui-monospace,Menlo,Consolas,monospace;-webkit-tap-highlight-color:transparent;overscroll-behavior:none}
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;1,400&display=swap');
+    html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font:14px/1.35 'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;font-weight:400;letter-spacing:0.025em;-webkit-tap-highlight-color:transparent;overscroll-behavior:none}
     .wrap{max-width:900px;margin:0 auto;padding:16px}
     .title{color:var(--accent);margin:0 0 10px 0;letter-spacing:.4px}
     .crt{background:var(--panel);border:1px solid var(--border);box-shadow:0 0 0 1px #000 inset}
@@ -30,6 +31,114 @@
     .challenge.active{border-color:#f44;background:#3a1a1a}
     .challenge.completed{border-color:#4f4;color:#9f9}
     .meta-upgrade{background:#1a1a2a;border-left:3px solid #44f;padding:4px 8px;margin:2px 0;font-size:11px}
+    
+    /* Collision Effects */
+    @keyframes screenShake {
+      0%, 100% { transform: translate(0, 0); }
+      25% { transform: translate(-2px, 1px); }
+      50% { transform: translate(1px, -2px); }
+      75% { transform: translate(-1px, 2px); }
+    }
+    @keyframes collision-flash {
+      0% { background: var(--panel); }
+      50% { background: rgba(255, 255, 255, 0.1); }
+      100% { background: var(--panel); }
+    }
+    @keyframes collision-pulse {
+      0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.3); }
+      70% { box-shadow: 0 0 0 10px rgba(255, 255, 255, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
+    }
+    .collision-effect {
+      animation: collision-flash 0.2s ease-out, collision-pulse 0.5s ease-out;
+    }
+    .screen-shake {
+      animation: screenShake 0.3s ease-out;
+    }
+    
+    /* Progress Modal Styles */
+    .progress-modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
+    .progress-modal.active {
+      opacity: 1;
+      pointer-events: all;
+    }
+    .progress-modal-content {
+      background: var(--panel);
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      padding: 24px;
+      max-width: 600px;
+      width: 90%;
+      max-height: 80%;
+      overflow-y: auto;
+      box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+    }
+    .progress-modal h3 {
+      margin: 0 0 16px 0;
+      color: var(--accent);
+      font-size: 18px;
+      text-align: center;
+    }
+    .progress-section {
+      margin: 16px 0;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.02);
+      border-left: 3px solid var(--border);
+    }
+    .progress-section h4 {
+      margin: 0 0 8px 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .progress-bar {
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 4px;
+      height: 8px;
+      margin: 4px 0;
+      overflow: hidden;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #4af, #f4a);
+      border-radius: 4px;
+      transition: width 0.3s ease;
+    }
+    .progress-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 4px 0;
+      font-size: 12px;
+    }
+    .progress-item.completed {
+      color: #4f4;
+    }
+    .progress-close {
+      position: absolute;
+      top: 12px;
+      right: 16px;
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 20px;
+      cursor: pointer;
+      padding: 4px;
+    }
   </style>
 </head>
 <body>
@@ -46,6 +155,9 @@
           <span>science: <span id="scienceDisplay">0</span><span id="scienceRate" style="color:#4af;font-size:10px"></span></span>
           <span id="quantumRow" style="display:none">quantum: <span id="quantumDisplay">0</span><span id="quantumRate" style="color:#f4a;font-size:10px"></span></span>
           <span id="antimatterRow" style="display:none">antimatter: <span id="antimatterDisplay">0</span><span id="antimatterRate" style="color:#fa4;font-size:10px"></span></span>
+        </div>
+        <div style="margin-top:8px;">
+          <button onclick="openProgressModal()" style="font-size:12px;padding:4px 8px;">view progress</button>
         </div>
         <div id="prestigeInfo" class="mono" style="display:none;margin-top:8px;color:#f4a">
           prestige lvl: <span id="prestigeLevel">0</span> | points: <span id="prestigePoints">0</span>
@@ -81,6 +193,15 @@
         <h2>// meta-upgrades</h2>
         <div id="metaUpgrades" class="mono"></div>
       </div>
+    </div>
+  </div>
+
+  <!-- Progress Modal -->
+  <div id="progressModal" class="progress-modal">
+    <div class="progress-modal-content">
+      <button class="progress-close" onclick="closeProgressModal()">&times;</button>
+      <h3>// progression tracker</h3>
+      <div id="progressContent"></div>
     </div>
   </div>
 
@@ -138,17 +259,32 @@
     extra:  { name:'spawn ball',cost:{pixels:40}, run(){ state.balls.push(createBall()); this.cost.pixels=Math.ceil(this.cost.pixels*1.6);} },
     pMult:  { name:'pixel x2',  cost:{energy:60}, run(){ state.mul.pixel*=2; this.cost.energy=Math.ceil(this.cost.energy*3);} },
     eMult:  { name:'energy x2', cost:{pixels:70}, run(){ state.mul.energy*=2; this.cost.pixels=Math.ceil(this.cost.pixels*3);} },
-    sBall:  { name:'energy ball', cost:{energy:200,science:10}, run(){ state.ballTypes.push('energy'); state.balls.push(createBall('energy')); this.cost.energy*=2; this.cost.science*=1.5; }, visible:()=>state.prestige.level>=1},
-    qBall:  { name:'quantum ball', cost:{science:500,quantum:1}, run(){ state.ballTypes.push('quantum'); state.balls.push(createBall('quantum')); this.cost.science*=3; this.cost.quantum*=2; }, visible:()=>state.prestige.level>=2},
+    
+    // Bits and bobs - intermediate upgrades
+    ballGrip: { name:'ball-grip', cost:{pixels:150,energy:80}, run(){ state.mul.ballGrip=1.2; this.cost.pixels*=2; this.cost.energy*=1.8; }},
+    efficiency: { name:'efficiency++', cost:{energy:120,science:5}, run(){ state.mul.efficiency=(state.mul.efficiency||1)*1.15; this.cost.energy*=2; this.cost.science*=2; }},
+    resonance: { name:'resonance', cost:{science:25,pixels:300}, run(){ state.mul.resonance=1.25; this.cost.science*=3; this.cost.pixels*=2; }},
+    catalyst: { name:'catalyst', cost:{energy:200,science:15}, run(){ state.mul.catalyst=1.3; this.cost.energy*=2.5; this.cost.science*=2; }},
+    harmonic: { name:'harmonic-sync', cost:{pixels:400,energy:150,science:30}, run(){ state.mul.harmonic=1.4; this.cost.pixels*=3; this.cost.energy*=2; this.cost.science*=2; }},
+    
+    sBall:  { name:'energy ball', cost:{energy:500,science:50}, run(){ state.ballTypes.push('energy'); state.balls.push(createBall('energy')); this.cost.energy*=2; this.cost.science*=1.5; }, visible:()=>state.stats.totalScience>=100&&state.stats.totalEnergy>=5000},
+    qBall:  { name:'quantum ball', cost:{science:1500,energy:2000}, run(){ state.ballTypes.push('quantum'); state.balls.push(createBall('quantum')); this.cost.science*=3; this.cost.energy*=2; }, visible:()=>state.stats.totalScience>=500&&state.stats.totalPixels>=25000&&state.prestige.level>=1},
     autoClick: { name:'auto-click', cost:{pixels:1000,energy:500}, run(){ state.automation.autoClick=true; delete Upgrades.autoClick; buildUpgrades(); }},
-    autoBuy:   { name:'auto-buy', cost:{science:100,quantum:5}, run(){ state.automation.autoBuy=true; delete Upgrades.autoBuy; buildUpgrades(); }, visible:()=>state.prestige.level>=1}
+    autoBuy:   { name:'auto-buy', cost:{science:100,energy:800}, run(){ state.automation.autoBuy=true; delete Upgrades.autoBuy; buildUpgrades(); }, visible:()=>state.stats.totalScience>=200}
   };
 
   const Buildings = {
     pgen: { name:'pixel-gen', cost:{energy:25}, prod:{pixels:.15}, n:0, tier:1 },
     ecap: { name:'collector', cost:{pixels:35}, prod:{energy:.10}, n:0, tier:1 },
     lab : { name:'lab',       cost:{pixels:80, energy:40}, prod:{science:.05}, n:0, tier:1 },
-    quantumGen: { name:'quantum-gen', cost:{science:200,energy:1000}, prod:{quantum:.02}, n:0, tier:2, visible:()=>state.prestige.level>=1 },
+    
+    // Intermediate tier 1.5 buildings (more bits and bobs)
+    amplifier: { name:'amplifier', cost:{pixels:150, energy:80}, prod:{pixels:.25, energy:.05}, n:0, tier:1.5, visible:()=>state.stats.totalPixels>=1000 },
+    conduit: { name:'conduit', cost:{energy:120, science:10}, prod:{energy:.20, science:.02}, n:0, tier:1.5, visible:()=>state.stats.totalEnergy>=800 },
+    synthesizer: { name:'synthesizer', cost:{pixels:200, energy:100, science:15}, prod:{pixels:.15, energy:.15, science:.08}, n:0, tier:1.5, visible:()=>state.stats.totalScience>=50 },
+    resonator: { name:'resonator', cost:{science:40, pixels:300}, prod:{science:.12, pixels:.08}, n:0, tier:1.5, visible:()=>state.stats.totalScience>=100 },
+    
+    quantumGen: { name:'quantum-gen', cost:{science:800,energy:3000,pixels:5000}, prod:{quantum:.02}, n:0, tier:2, visible:()=>state.stats.totalScience>=1000&&state.stats.totalPixels>=50000&&state.prestige.level>=1 },
     antimatterGen: { name:'antimatter-gen', cost:{quantum:50,pixels:10000}, prod:{antimatter:.01}, n:0, tier:3, visible:()=>state.prestige.level>=2 },
     megaLab: { name:'mega-lab', cost:{antimatter:1,science:5000}, prod:{science:2}, n:0, tier:3, visible:()=>state.prestige.level>=2 },
     autoFactory: { name:'auto-factory', cost:{antimatter:5,quantum:100}, prod:{pixels:10,energy:5}, n:0, tier:4, visible:()=>state.prestige.level>=3 }
@@ -158,9 +294,16 @@
     physics: { name:'physics', cost:{science:120}, run(){ state.balls.forEach(b=>{b.vx*=1.07; b.vy*=1.07;}); delete Research.physics; buildResearch(); } },
     cache:   { name:'cache',   cost:{science:250}, run(){ savePeriod=2500; delete Research.cache; buildResearch(); } },
     ballPhysics: { name:'collision-bonus', cost:{science:500}, run(){ state.mul.collisionBonus=2; delete Research.ballPhysics; buildResearch(); } },
-    quantumTheory: { name:'quantum-theory', cost:{science:1000,quantum:2}, run(){ state.mul.quantum=2; delete Research.quantumTheory; buildResearch(); }, visible:()=>state.prestige.level>=1 },
+    
+    // Intermediate research (more bits and bobs)
+    momentum: { name:'momentum-theory', cost:{science:300}, run(){ state.mul.momentum=1.2; delete Research.momentum; buildResearch(); }, visible:()=>state.stats.totalScience>=150 },
+    harmonics: { name:'wave-harmonics', cost:{science:450,energy:1000}, run(){ state.mul.harmonics=1.25; delete Research.harmonics; buildResearch(); }, visible:()=>state.stats.totalScience>=300 },
+    fieldTheory: { name:'field-theory', cost:{science:600,pixels:2000}, run(){ state.mul.fieldTheory=1.3; delete Research.fieldTheory; buildResearch(); }, visible:()=>state.stats.totalScience>=400 },
+    entanglement: { name:'entanglement-prep', cost:{science:800,energy:2000}, run(){ state.mul.entanglement=1.15; delete Research.entanglement; buildResearch(); }, visible:()=>state.stats.totalScience>=600 },
+    
+    quantumTheory: { name:'quantum-theory', cost:{science:1500,energy:3000}, run(){ state.mul.quantum=2; delete Research.quantumTheory; buildResearch(); }, visible:()=>state.stats.totalScience>=1000&&state.prestige.level>=1 },
     timeAccel: { name:'time-acceleration', cost:{antimatter:1,quantum:10}, run(){ state.mul.timeScale=1.5; delete Research.timeAccel; buildResearch(); }, visible:()=>state.prestige.level>=2 },
-    prestigeUnlock: { name:'enable-prestige', cost:{science:2000,quantum:5}, run(){ state.prestige.unlocked=true; delete Research.prestigeUnlock; buildResearch(); updatePrestige(); }, visible:()=>!state.prestige.unlocked&&state.stats.totalPixels>=50000 }
+    prestigeUnlock: { name:'enable-prestige', cost:{science:2000,energy:5000}, run(){ state.prestige.unlocked=true; delete Research.prestigeUnlock; buildResearch(); updatePrestige(); }, visible:()=>!state.prestige.unlocked&&state.stats.totalPixels>=100000&&state.stats.totalScience>=800 }
   };
 
   const Milestones = {
@@ -561,6 +704,102 @@
     updateAfford();
   }
 
+  // ---------- collision effects ----------
+  function triggerCollisionEffect() {
+    const canvas = document.getElementById('gameCanvas');
+    canvas.classList.add('collision-effect');
+    setTimeout(() => canvas.classList.remove('collision-effect'), 200);
+    
+    // Add screen shake occasionally for more impactful collisions
+    if (Math.random() < 0.3) {
+      document.body.classList.add('screen-shake');
+      setTimeout(() => document.body.classList.remove('screen-shake'), 300);
+    }
+  }
+
+  // ---------- progress modal ----------
+  function openProgressModal() {
+    const modal = document.getElementById('progressModal');
+    const content = document.getElementById('progressContent');
+    
+    content.innerHTML = generateProgressContent();
+    modal.classList.add('active');
+  }
+  
+  function closeProgressModal() {
+    const modal = document.getElementById('progressModal');
+    modal.classList.remove('active');
+  }
+  
+  function generateProgressContent() {
+    let html = '';
+    
+    // Resource Progress
+    html += '<div class="progress-section">';
+    html += '<h4>Resource Milestones</h4>';
+    const resourceGoals = [
+      {name: 'Pixels', current: state.stats.totalPixels, goals: [100, 1000, 10000, 100000]},
+      {name: 'Energy', current: state.stats.totalEnergy, goals: [50, 500, 5000, 50000]},
+      {name: 'Science', current: state.stats.totalScience, goals: [10, 100, 500, 1000]}
+    ];
+    
+    resourceGoals.forEach(res => {
+      html += `<div class="progress-item"><strong>${res.name}</strong></div>`;
+      res.goals.forEach(goal => {
+        const progress = Math.min(100, (res.current / goal) * 100);
+        const completed = res.current >= goal;
+        html += `<div class="progress-item ${completed?'completed':''}">`;
+        html += `<span>${goal.toLocaleString()}</span>`;
+        html += `<span>${completed ? '✓' : Math.floor(progress) + '%'}</span>`;
+        html += `</div>`;
+        html += `<div class="progress-bar"><div class="progress-bar-fill" style="width:${progress}%"></div></div>`;
+      });
+    });
+    html += '</div>';
+    
+    // Unlock Progress
+    html += '<div class="progress-section">';
+    html += '<h4>Unlock Progress</h4>';
+    
+    const unlocks = [
+      {name: 'Energy Ball', unlocked: state.ballTypes.includes('energy'), req: 'Science: 100, Energy: 5000'},
+      {name: 'Quantum Content', unlocked: state.stats.totalScience>=1000&&state.stats.totalPixels>=50000&&state.prestige.level>=1, req: 'Science: 1000, Pixels: 50000, Prestige: 1'},
+      {name: 'Prestige System', unlocked: state.prestige.unlocked, req: 'Science: 800, Pixels: 100000'},
+      {name: 'Intermediate Buildings', unlocked: state.stats.totalPixels>=1000, req: 'Pixels: 1000'},
+      {name: 'Advanced Research', unlocked: state.stats.totalScience>=150, req: 'Science: 150'}
+    ];
+    
+    unlocks.forEach(unlock => {
+      html += `<div class="progress-item ${unlock.unlocked?'completed':''}">`;
+      html += `<span>${unlock.name}</span>`;
+      html += `<span>${unlock.unlocked ? '✓' : '✗'}</span>`;
+      html += `</div>`;
+      html += `<div style="font-size:10px;color:var(--muted);margin-bottom:8px;">${unlock.req}</div>`;
+    });
+    html += '</div>';
+    
+    // Building Progress
+    html += '<div class="progress-section">';
+    html += '<h4>Building Count</h4>';
+    const totalBuildings = Object.values(Buildings).reduce((sum, b) => sum + b.n, 0);
+    html += `<div class="progress-item">`;
+    html += `<span>Total Buildings</span>`;
+    html += `<span>${totalBuildings}</span>`;
+    html += `</div>`;
+    
+    Object.entries(Buildings).forEach(([key, bld]) => {
+      if(bld.n > 0 || (bld.visible && bld.visible())) {
+        html += `<div class="progress-item">`;
+        html += `<span>${bld.name}</span>`;
+        html += `<span>${bld.n}</span>`;
+        html += `</div>`;
+      }
+    });
+    html += '</div>';
+    
+    return html;
+  }
+
   // ---------- simulation ----------
   function stepBalls(){
     // Challenge effects
@@ -595,7 +834,13 @@
       if(hitV||hitH){
         state.stats.wallHits++;
         const collisionBonus = state.mul.collisionBonus || 1;
-        const totalResourceMult = resourceMult * collisionBonus;
+        const totalResourceMult = resourceMult * collisionBonus * 
+          (state.mul.ballGrip || 1) * (state.mul.efficiency || 1) * (state.mul.resonance || 1) * 
+          (state.mul.catalyst || 1) * (state.mul.harmonic || 1) * (state.mul.momentum || 1) * 
+          (state.mul.harmonics || 1) * (state.mul.fieldTheory || 1) * (state.mul.entanglement || 1);
+        
+        // Trigger collision effect
+        triggerCollisionEffect();
         
         if(hitV&&hitH){ 
           const pGain = 2*ballType.pixelMult*state.mul.pixel*totalResourceMult;
@@ -670,6 +915,8 @@
             const scienceGain = 0.5 * (state.mul.science || 1) * resourceMult;
             state.resources.science += scienceGain;
             state.stats.totalScience += scienceGain;
+            // Trigger collision effect for ball-to-ball collisions too
+            if(Math.random() < 0.5) triggerCollisionEffect();
           }
         }
       }

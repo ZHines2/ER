@@ -891,11 +891,70 @@
     refresh(true);
   }
 
+  // Notification system for important events
+  function showNotification(message, type = 'info', duration = 4000) {
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      padding: 12px 20px;
+      border-radius: 8px;
+      color: white;
+      font-weight: bold;
+      z-index: 10000;
+      max-width: 300px;
+      border: 2px solid;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      animation: slideIn 0.3s ease-out;
+      white-space: pre-line;
+    `;
+    
+    // Set colors based on type
+    if (type === 'success') {
+      notification.style.backgroundColor = '#2d5a2d';
+      notification.style.borderColor = '#4f4';
+    } else if (type === 'warning') {
+      notification.style.backgroundColor = '#5a4a2d';
+      notification.style.borderColor = '#fa4';
+    } else {
+      notification.style.backgroundColor = '#2d4a5a';
+      notification.style.borderColor = '#4af';
+    }
+    
+    notification.textContent = message;
+    
+    // Add slide-in animation
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes slideIn {
+        from { transform: translateX(100%); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+      }
+    `;
+    document.head.appendChild(style);
+    
+    document.body.appendChild(notification);
+    
+    // Auto-remove after duration
+    setTimeout(() => {
+      if (notification.parentNode) {
+        notification.style.animation = 'slideIn 0.3s ease-in reverse';
+        setTimeout(() => notification.remove(), 300);
+      }
+    }, duration);
+  }
+
   function checkChallengeCompletion(){
     if(state.activeChallenge){
       const challenge = Challenges[state.activeChallenge];
       if(challenge.goalCheck()){
         state.challengesCompleted[state.activeChallenge] = true;
+        
+        // Show challenge completion notification
+        showNotification(`🎉 Challenge Complete! ${challenge.name}\nReward: ${challenge.reward}`, 'success');
+        
         // Apply challenge reward
         applyChallengeReward(state.activeChallenge, challenge);
         exitChallenge();
@@ -975,6 +1034,9 @@
       extra: "Spawn a new ball. More balls = more collisions = more resources.",
       pMult: "Double pixel generation from all sources. Essential for early game progression.",
       eMult: "Double energy generation from all sources. Energy powers advanced buildings.",
+      wallBouncer: "Increase wall collision bonus by 50%. Walls give more resources when hit.",
+      speedBurst: "Give each ball 3 speed burst charges. Click balls to use charges for temporary speed boost.",
+      collisionMaster: "Increase collision effectiveness by 30%. All ball collisions generate more resources.",
       ballGrip: "Balls grip walls better, improving resource generation by 20%.",
       efficiency: "General efficiency boost (15%) affecting multiple game systems.",
       resonance: "Harmonic resonance increases resource generation by 25%.",
@@ -1970,13 +2032,33 @@
     
     // Auto-buy cheapest building if automation is on
     if(state.automation.autoBuy){
+      let cheapestBuilding = null;
+      let cheapestCost = Infinity;
+      
+      // Find the cheapest affordable building
       for(const [k,bld] of Object.entries(Buildings)){
         if(can(bld.cost)){
-          pay(bld.cost); 
-          bld.n++; 
-          updateBuildingCost(k);
-          break;
+          // Calculate total cost value (sum all resource costs in equivalent pixels)
+          let totalCost = 0;
+          for(const [resource, cost] of Object.entries(bld.cost)) {
+            // Simple conversion rates: energy=1.5x pixels, science=10x pixels
+            const multiplier = resource === 'energy' ? 1.5 : resource === 'science' ? 10 : 1;
+            totalCost += cost * multiplier;
+          }
+          
+          if(totalCost < cheapestCost) {
+            cheapestCost = totalCost;
+            cheapestBuilding = k;
+          }
         }
+      }
+      
+      // Purchase the cheapest building found
+      if(cheapestBuilding) {
+        const bld = Buildings[cheapestBuilding];
+        pay(bld.cost); 
+        bld.n++; 
+        updateBuildingCost(cheapestBuilding);
       }
     }
     
@@ -1990,7 +2072,7 @@
 
   // ---------- persistence ----------
   let savePeriod = 5000;
-  const SAVE_VERSION = 2;
+  const SAVE_VERSION = 3;
   
   function save(){ 
     try{ 
@@ -1999,6 +2081,10 @@
         r:state.resources, 
         balls:state.balls, 
         b:Object.fromEntries(Object.entries(Buildings).map(([k,v])=>[k,v.n])), 
+        // Save current building costs
+        buildingCosts:Object.fromEntries(Object.entries(Buildings).map(([k,v])=>[k,v.cost])),
+        // Save current upgrade costs  
+        upgradeCosts:Object.fromEntries(Object.entries(Upgrades).map(([k,v])=>[k,v.cost])),
         mul:state.mul,
         prestige:state.prestige,
         milestones:state.milestones,
@@ -2034,6 +2120,13 @@
         if(!d.efficiency) d.efficiency = {ballSpeed:1,production:1,cost:1};
         if(!d.rates) d.rates = {pixels:0,energy:0,science:0,quantum:0,antimatter:0};
         if(!d.lastSave) d.lastSave = Date.now();
+      }
+      
+      if(!d.version || d.version < 3){
+        console.log('Migrating old save to version 3');
+        // Version 3 adds upgrade/building cost persistence
+        // No specific migration needed as the new code handles missing cost data gracefully
+        d.version = 3;
       }
       
       // Validate and clamp resources
@@ -2170,6 +2263,24 @@
         for(const [k,n] of Object.entries(d.b)) {
           if(Buildings[k] && typeof n === 'number' && Number.isFinite(n) && n >= 0) {
             Buildings[k].n = Math.min(n, 10000); // Clamp building counts
+          }
+        }
+      } 
+      
+      // Restore building costs (fix for challenge price reset issue)
+      if(d.buildingCosts && typeof d.buildingCosts === 'object') {
+        for(const [k,costs] of Object.entries(d.buildingCosts)) {
+          if(Buildings[k] && costs && typeof costs === 'object') {
+            Buildings[k].cost = {...costs}; // Restore saved costs
+          }
+        }
+      }
+      
+      // Restore upgrade costs (fix for challenge price reset issue) 
+      if(d.upgradeCosts && typeof d.upgradeCosts === 'object') {
+        for(const [k,costs] of Object.entries(d.upgradeCosts)) {
+          if(Upgrades[k] && costs && typeof costs === 'object') {
+            Upgrades[k].cost = {...costs}; // Restore saved costs
           }
         }
       } 

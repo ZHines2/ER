@@ -1594,14 +1594,18 @@
       state.balls = state.balls.slice(0, maxBalls);
     }
     
-    // Process each ball and handle age tracking
+    // Process each ball and handle age tracking + passive decay
     for(let i = state.balls.length - 1; i >= 0; i--) {
       const b = state.balls[i];
       const ballType = BallTypes[b.type] || BallTypes.basic;
       b.age++;
       
-      // Note: Decay now only happens on ball-to-ball collisions, not over time
-      // This allows single balls to persist indefinitely
+      // Add passive decay over time (age-based) - makes balls naturally deteriorate
+      if(state.decay.decayEnabled && currentDecayRate > 0) {
+        const passiveDecayRate = currentDecayRate * 0.0008; // Small but meaningful passive decay
+        const ageDecayBonus = Math.min(2.0, 1 + (b.age * 0.00001)); // Older balls decay slightly faster
+        b.vitality = Math.max(0.05, b.vitality - (b.decayRate * passiveDecayRate * ageDecayBonus));
+      }
       
       const baseSpeed = ballType.speed * ballSpeedMult;
       if(!Number.isFinite(b.vx)||Math.abs(b.vx)<.05) b.vx=randSign()*1.2*baseSpeed;
@@ -1808,60 +1812,67 @@
           b1.lastCollisionTime = Date.now();
           b2.lastCollisionTime = Date.now();
           
-          // Apply decay on collision with velocity-dependent effects
+          // Apply decay on collision with velocity-dependent effects - made more aggressive
           if(state.decay.decayEnabled && currentDecayRate > 0) {
-            const baseDecayRate = currentDecayRate * 0.05;
+            const baseDecayRate = currentDecayRate * 0.15; // Increased from 0.05 to 0.15 for more noticeable decay
             // Higher velocity collisions cause more decay
-            const velocityDecayMultiplier = 1 + (energyIntensity * 0.5);
+            const velocityDecayMultiplier = 1 + (energyIntensity * 0.8); // Increased multiplier effect
             const actualDecayRate = baseDecayRate * velocityDecayMultiplier;
             
-            b1.vitality = Math.max(0.1, b1.vitality - (b1.decayRate * actualDecayRate));
-            b2.vitality = Math.max(0.1, b2.vitality - (b2.decayRate * actualDecayRate));
+            b1.vitality = Math.max(0.05, b1.vitality - (b1.decayRate * actualDecayRate)); // Lower threshold from 0.1 to 0.05
+            b2.vitality = Math.max(0.05, b2.vitality - (b2.decayRate * actualDecayRate));
             
-            // Apply vitality recovery if available (less effective at high energies)
+            // Apply vitality recovery if available (less effective at high energies and reduced overall)
             if(state.decay.vitalityRecoveryRate > 0) {
-              const recoveryMultiplier = Math.max(0.1, 1 - (energyIntensity * 0.3));
-              const recovery = state.decay.vitalityRecoveryRate * recoveryMultiplier;
+              const recoveryMultiplier = Math.max(0.05, 1 - (energyIntensity * 0.5)); // Reduced effectiveness
+              const recovery = state.decay.vitalityRecoveryRate * recoveryMultiplier * 0.6; // 40% less recovery
               b1.vitality = Math.min(b1.maxVitality, b1.vitality + recovery);
               b2.vitality = Math.min(b2.maxVitality, b2.vitality + recovery);
             }
           }
           
           // Enhanced collision bonus based on ball characteristics and energy
+          // Generate science for all ball-to-ball collisions, more for different types
+          let scienceBonus = 1.0;
           if(b1.type !== b2.type){
             // Different ball types create more science based on mass difference and collision energy
             const massRatio = Math.abs(m1 - m2) / Math.max(m1, m2);
-            const scienceMultiplier = 1 + massRatio + (energyIntensity * 0.5);
-            const scienceGain = 0.5 * (state.mul.science || 1) * resourceMult * scienceMultiplier;
-            state.resources.science += scienceGain;
-            state.stats.totalScience += scienceGain;
-            state.stats.totalResources += scienceGain;
+            scienceBonus = 1 + massRatio + (energyIntensity * 0.5);
             
-            // Higher energy collisions trigger more visual effects
+            // Higher energy collisions trigger more visual effects for different types
             if(Math.random() < (0.5 + energyIntensity * 0.3)) triggerCollisionEffect();
+          } else {
+            // Same ball types generate reduced science but still generate some
+            scienceBonus = 0.2 + (energyIntensity * 0.1);
           }
+          
+          const scienceGain = 0.5 * (state.mul.science || 1) * resourceMult * scienceBonus;
+          state.resources.science += scienceGain;
+          state.stats.totalScience += scienceGain;
+          state.stats.totalResources += scienceGain;
         }
       }
     }
     
-    // Check for balls that should die from decay (only after collisions)
+    // Check for balls that should die from decay - lowered threshold for more frequent deaths
     for(let i = state.balls.length - 1; i >= 0; i--) {
       const b = state.balls[i];
-      if(b.vitality <= 0.1) { // Minimum vitality threshold
+      if(b.vitality <= 0.05) { // Lowered threshold from 0.1 to 0.05 to match decay limits
         state.stats.ballsLost++;
         state.balls.splice(i, 1);
       }
     }
     
-    // Emergency ball spawning system - prevent complete extinction
+    // Emergency ball spawning system - less aggressive to allow natural decay periods
     if(state.balls.length === 0) {
       if(Milestones.survivor && Milestones.survivor.completed) {
         // Spawn emergency ball if survivor milestone is completed
         state.balls.push(createBall());
         console.log('Emergency ball spawned due to extinction!');
       } else {
-        // Spawn emergency ball but only if the player had balls before
-        if(state.stats.ballsSpawned > 1) {
+        // Only spawn emergency ball if player had many balls before (higher threshold)
+        // This allows for some natural extinction periods, making decay more meaningful
+        if(state.stats.ballsSpawned > 5) { // Raised from 1 to 5
           state.balls.push(createBall());
           console.log('Emergency ball spawned to prevent game over!');
         }

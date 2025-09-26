@@ -1079,8 +1079,8 @@
       harmonic: "Harmonic synchronization provides 40% boost to all systems.",
       sBall: "Unlock energy balls: slower but generate 3x energy + quantum particles.",
       qBall: "Unlock quantum balls: fast, agile, generate quantum and 2x pixels.",
-      autoClick: "Automatically perform manual clicking actions.",
-      autoBuy: "Automatically purchase buildings when affordable.",
+      autoClick: "Automatically clicks balls to trigger their special effects (speed boosts, energy bursts, etc.) every 30 frames when not on cooldown.",
+      autoBuy: "Automatically purchases the cheapest affordable building every second to maximize passive income growth.",
       vitalBoost: "Restore 0.2 vitality to all balls. Healthy balls are more effective.",
       decayResistance: "Reduce global decay rate by 25%. Balls last longer.",
       collisionRecovery: "Balls recover +0.02 vitality per collision.",
@@ -2255,6 +2255,49 @@
         pay(bld.cost); 
         bld.n++; 
         updateBuildingCost(cheapestBuilding);
+      }
+    }
+    
+    // Auto-click balls if automation is on
+    if(state.automation.autoClick && state.interaction.cooldown <= 0){
+      // Find a suitable ball to click (has enough vitality and unlocked click effect)
+      const clickableBalls = state.balls.filter(ball => {
+        if (ball.vitality < 0.2) return false; // Need minimum vitality
+        const ballType = BallTypes[ball.type];
+        if (!ballType || !ballType.clickEffect) return false;
+        
+        // Check if this ball's click effect is unlocked
+        switch(ballType.clickEffect) {
+          case 'speed_boost': return true; // Always available
+          case 'energy_burst': return state.stats.totalEnergy >= 100;
+          case 'quantum_tunnel': return state.ballTypes.includes('quantum') && state.stats.totalScience >= 500;
+          case 'antimatter_explosion': return state.ballTypes.includes('antimatter') && state.resources.antimatter >= 1;
+          case 'homing_attack': return ball.type === 'cosmic' && state.interaction.homingUnlocked;
+          case 'light_burst': return ball.type === 'photon' && state.resources.lightYears >= 1;
+          case 'phase_shift': return ball.type === 'darkMatter' && state.resources.darkEnergy >= 10;
+          case 'void_warp': return ball.type === 'void' && state.resources.voidEssence >= 1;
+          case 'gravity_well': return ball.type === 'graviton' && state.resources.gravitonWaves >= 10;
+          default: return false;
+        }
+      });
+      
+      if(clickableBalls.length > 0) {
+        // Pick a random clickable ball to avoid always clicking the same one
+        const randomBall = clickableBalls[Math.floor(Math.random() * clickableBalls.length)];
+        const ballType = BallTypes[randomBall.type];
+        
+        // Execute the ball's click effect
+        const success = executeBallClickEffect(randomBall, ballType);
+        
+        if (success) {
+          // Apply cooldown and vitality cost just like manual clicking
+          state.interaction.cooldown = 30;
+          randomBall.vitality -= getBallClickCost(randomBall.type);
+          
+          // Track interaction stats
+          state.stats.ballInteractions = (state.stats.ballInteractions || 0) + 1;
+          updateInteractionStats(ballType.clickEffect);
+        }
       }
     }
     

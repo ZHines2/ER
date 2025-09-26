@@ -279,12 +279,40 @@
         <h2>// debug console</h2>
         <div style="font-size:10px;color:#9aa0a6;margin-bottom:8px;">Press Ctrl+Shift+D or enter Konami code to enable</div>
         <div class="mono" style="font-size:10px;">
+          <!-- Resource Management -->
+          <div style="margin-bottom:8px;color:#4af;">Resources:</div>
           <button onclick="debug.addResource('pixels', 1000)" style="margin:2px;padding:2px 4px;font-size:10px;">+1k pixels</button>
+          <button onclick="debug.addResource('energy', 1000)" style="margin:2px;padding:2px 4px;font-size:10px;">+1k energy</button>
           <button onclick="debug.addResource('science', 100)" style="margin:2px;padding:2px 4px;font-size:10px;">+100 science</button>
-          <button onclick="debug.addBalls(5)" style="margin:2px;padding:2px 4px;font-size:10px;">+5 balls</button>
-          <button onclick="debug.skipToEndgame()" style="margin:2px;padding:2px 4px;font-size:10px;color:#fa4;">end-game</button>
-          <button onclick="debug.testPhysics()" style="margin:2px;padding:2px 4px;font-size:10px;">test physics</button>
+          <button onclick="debug.addResource('quantum', 50)" style="margin:2px;padding:2px 4px;font-size:10px;">+50 quantum</button>
+          <button onclick="debug.addResource('antimatter', 10)" style="margin:2px;padding:2px 4px;font-size:10px;">+10 antimatter</button>
+          <button onclick="debug.addResource('cosmicEnergy', 100)" style="margin:2px;padding:2px 4px;font-size:10px;color:#ff6b9d;">+100 cosmic</button>
+          
+          <!-- Ball Management -->
+          <div style="margin:8px 0 4px 0;color:#4af;">Balls:</div>
+          <button onclick="debug.addBalls(3)" style="margin:2px;padding:2px 4px;font-size:10px;">+3 balls</button>
+          <button onclick="debug.addBalls(1, 'energy')" style="margin:2px;padding:2px 4px;font-size:10px;">+energy ball</button>
+          <button onclick="debug.addBalls(1, 'quantum')" style="margin:2px;padding:2px 4px;font-size:10px;">+quantum ball</button>
+          <button onclick="debug.addBalls(1, 'antimatter')" style="margin:2px;padding:2px 4px;font-size:10px;">+antimatter ball</button>
+          <button onclick="debug.addBalls(1, 'cosmic')" style="margin:2px;padding:2px 4px;font-size:10px;color:#ff6b9d;">+cosmic ball</button>
+          
+          <!-- Progression Management -->
+          <div style="margin:8px 0 4px 0;color:#4af;">Progression:</div>
+          <button onclick="debug.setPrestige(1)" style="margin:2px;padding:2px 4px;font-size:10px;">prestige 1</button>
+          <button onclick="debug.setPrestige(5)" style="margin:2px;padding:2px 4px;font-size:10px;">prestige 5</button>
+          <button onclick="debug.cosmicStart()" style="margin:2px;padding:2px 4px;font-size:10px;color:#ff6b9d;">cosmic start</button>
           <button onclick="debug.unlockAll()" style="margin:2px;padding:2px 4px;font-size:10px;color:#4af;">unlock all</button>
+          
+          <!-- Quick Tests -->
+          <div style="margin:8px 0 4px 0;color:#4af;">Tests:</div>
+          <button onclick="debug.testCollisions()" style="margin:2px;padding:2px 4px;font-size:10px;">test collisions</button>
+          <button onclick="debug.testDecay()" style="margin:2px;padding:2px 4px;font-size:10px;">test decay</button>
+          <button onclick="debug.skipToEndgame()" style="margin:2px;padding:2px 4px;font-size:10px;color:#fa4;">end-game</button>
+          
+          <!-- Analysis Tools -->
+          <div style="margin:8px 0 4px 0;color:#4af;">Analysis:</div>
+          <button onclick="debug.showProgressReport()" style="margin:2px;padding:2px 4px;font-size:10px;">progress report</button>
+          <button onclick="debug.analyzeState()" style="margin:2px;padding:2px 4px;font-size:10px;">analyze state</button>
         </div>
       </div>
     </div>
@@ -408,10 +436,10 @@
     sBall:  { name:'energy ball', cost:{energy:500,science:50}, run(){ state.ballTypes.push('energy'); state.balls.push(createBall('energy')); state.stats.ballTypesUnlocked = state.ballTypes.length; this.cost.energy*=2; this.cost.science*=1.5; }, visible:()=>state.stats.totalScience>=100&&state.stats.totalEnergy>=5000},
     qBall:  { name:'quantum ball', cost:{science:1500,energy:2000}, run(){ state.ballTypes.push('quantum'); state.balls.push(createBall('quantum')); state.stats.ballTypesUnlocked = state.ballTypes.length; this.cost.science*=3; this.cost.energy*=2; }, visible:()=>state.stats.totalScience>=500&&state.stats.totalPixels>=25000&&state.prestige.level>=1},
     
-    // Cosmic-tier ball unlocks - require advanced progression
-    cosmicBall: { name:'cosmic ball', cost:{antimatter:25,cosmicEnergy:100}, 
-                  run(){ state.ballTypes.push('cosmic'); state.balls.push(createBall('cosmic')); state.stats.ballTypesUnlocked = state.ballTypes.length; this.cost.antimatter*=3; this.cost.cosmicEnergy*=2; }, 
-                  visible:()=>state.prestige.level>=5&&state.resources.cosmicEnergy>=50},
+    // Cosmic-tier ball unlocks - require advanced progression (made more accessible)
+    cosmicBall: { name:'cosmic ball', cost:{antimatter:15,cosmicEnergy:50}, // Reduced from 25/100 to 15/50
+                  run(){ state.ballTypes.push('cosmic'); state.balls.push(createBall('cosmic')); state.stats.ballTypesUnlocked = state.ballTypes.length; this.cost.antimatter*=2; this.cost.cosmicEnergy*=1.5; }, // Reduced scaling
+                  visible:()=>state.prestige.level>=5&&state.resources.cosmicEnergy>=25}, // Reduced visibility requirement
     photonBall: { name:'photon ball', cost:{lightYears:10,photonEnergy:50}, 
                   run(){ state.ballTypes.push('photon'); state.balls.push(createBall('photon')); state.stats.ballTypesUnlocked = state.ballTypes.length; this.cost.lightYears*=2; this.cost.photonEnergy*=3; }, 
                   visible:()=>state.resources.lightYears>=5&&state.stats.cosmicCollisions>=1000},
@@ -542,7 +570,7 @@
     survivor: { name:'Survivor', desc:'Lose 10 balls to decay', threshold:10, stat:'ballsLost', reward:'Emergency ball spawn when no balls remain', completed:false, tier:1 },
     
     // Advanced milestones
-    prestigeMaster: { name:'Prestige Pioneer', desc:'Reach prestige level 5', threshold:5, stat:'level', reward:'Unlock cosmic energy generation', completed:false, tier:2 },
+    prestigeMaster: { name:'Prestige Pioneer', desc:'Reach prestige level 5', threshold:5, stat:'level', reward:'Unlock cosmic energy generation + 25 cosmic energy', completed:false, tier:2 },
     ballVariety: { name:'Ball Collector', desc:'Unlock 5 ball types', threshold:5, stat:'ballTypesUnlocked', reward:'Ball type synergy bonuses', completed:false, tier:2 },
     hundredK: { name:'Resource Mogul', desc:'Generate 100K total resources', threshold:100000, stat:'totalResources', reward:'Resource efficiency +25%', completed:false, tier:2 },
     
@@ -716,7 +744,7 @@
     // Tier 2: Advanced balls with enhanced interactions
     quantum: { name: 'Quantum Ball', color: '#f4a', r: 6, speed: 1.5, pixelMult: 2, energyMult: 0.8, mass: 0.6, restitution: 1.2, quantumGen: 0.1, tier: 2,
               clickEffect: 'quantum_tunnel', clickDescription: 'Click to quantum tunnel to random location' },
-    antimatter: { name: 'Antimatter Ball', color: '#fa4', r: 12, speed: 0.6, pixelMult: 5, energyMult: 5, mass: 2.5, restitution: 0.6, antimatterGen: 0.05, tier: 2,
+    antimatter: { name: 'Antimatter Ball', color: '#fa4', r: 12, speed: 0.6, pixelMult: 5, energyMult: 5, mass: 2.5, restitution: 0.6, antimatterGen: 0.05, cosmicGen: 0.002, tier: 2, // Added small cosmic generation
                  clickEffect: 'antimatter_explosion', clickDescription: 'Click for powerful antimatter explosion' },
     
     // Tier 3: Cosmic balls with specialized interactions
@@ -864,6 +892,11 @@
       case 'ballMaster': state.balls.forEach(b => { b.vx *= 1.2; b.vy *= 1.2; }); break;
       case 'scienceFirst': state.mul.science = (state.mul.science || 1) * 1.5; break;
       case 'survivor': /* Emergency spawn system enabled */ break;
+      case 'prestigeMaster': 
+        // Grant initial cosmic energy to kickstart cosmic progression
+        state.resources.cosmicEnergy = (state.resources.cosmicEnergy || 0) + 25;
+        console.log('Prestige Pioneer complete! Granted 25 cosmic energy to start cosmic progression.'); 
+        break;
     }
   }
 
@@ -1594,14 +1627,18 @@
       state.balls = state.balls.slice(0, maxBalls);
     }
     
-    // Process each ball and handle age tracking
+    // Process each ball and handle age tracking + passive decay
     for(let i = state.balls.length - 1; i >= 0; i--) {
       const b = state.balls[i];
       const ballType = BallTypes[b.type] || BallTypes.basic;
       b.age++;
       
-      // Note: Decay now only happens on ball-to-ball collisions, not over time
-      // This allows single balls to persist indefinitely
+      // Add passive decay over time (age-based) - makes balls naturally deteriorate
+      if(state.decay.decayEnabled && currentDecayRate > 0) {
+        const passiveDecayRate = currentDecayRate * 0.0008; // Small but meaningful passive decay
+        const ageDecayBonus = Math.min(2.0, 1 + (b.age * 0.00001)); // Older balls decay slightly faster
+        b.vitality = Math.max(0.05, b.vitality - (b.decayRate * passiveDecayRate * ageDecayBonus));
+      }
       
       const baseSpeed = ballType.speed * ballSpeedMult;
       if(!Number.isFinite(b.vx)||Math.abs(b.vx)<.05) b.vx=randSign()*1.2*baseSpeed;
@@ -1808,60 +1845,67 @@
           b1.lastCollisionTime = Date.now();
           b2.lastCollisionTime = Date.now();
           
-          // Apply decay on collision with velocity-dependent effects
+          // Apply decay on collision with velocity-dependent effects - made more aggressive
           if(state.decay.decayEnabled && currentDecayRate > 0) {
-            const baseDecayRate = currentDecayRate * 0.05;
+            const baseDecayRate = currentDecayRate * 0.15; // Increased from 0.05 to 0.15 for more noticeable decay
             // Higher velocity collisions cause more decay
-            const velocityDecayMultiplier = 1 + (energyIntensity * 0.5);
+            const velocityDecayMultiplier = 1 + (energyIntensity * 0.8); // Increased multiplier effect
             const actualDecayRate = baseDecayRate * velocityDecayMultiplier;
             
-            b1.vitality = Math.max(0.1, b1.vitality - (b1.decayRate * actualDecayRate));
-            b2.vitality = Math.max(0.1, b2.vitality - (b2.decayRate * actualDecayRate));
+            b1.vitality = Math.max(0.05, b1.vitality - (b1.decayRate * actualDecayRate)); // Lower threshold from 0.1 to 0.05
+            b2.vitality = Math.max(0.05, b2.vitality - (b2.decayRate * actualDecayRate));
             
-            // Apply vitality recovery if available (less effective at high energies)
+            // Apply vitality recovery if available (less effective at high energies and reduced overall)
             if(state.decay.vitalityRecoveryRate > 0) {
-              const recoveryMultiplier = Math.max(0.1, 1 - (energyIntensity * 0.3));
-              const recovery = state.decay.vitalityRecoveryRate * recoveryMultiplier;
+              const recoveryMultiplier = Math.max(0.05, 1 - (energyIntensity * 0.5)); // Reduced effectiveness
+              const recovery = state.decay.vitalityRecoveryRate * recoveryMultiplier * 0.6; // 40% less recovery
               b1.vitality = Math.min(b1.maxVitality, b1.vitality + recovery);
               b2.vitality = Math.min(b2.maxVitality, b2.vitality + recovery);
             }
           }
           
           // Enhanced collision bonus based on ball characteristics and energy
+          // Generate science for all ball-to-ball collisions, more for different types
+          let scienceBonus = 1.0;
           if(b1.type !== b2.type){
             // Different ball types create more science based on mass difference and collision energy
             const massRatio = Math.abs(m1 - m2) / Math.max(m1, m2);
-            const scienceMultiplier = 1 + massRatio + (energyIntensity * 0.5);
-            const scienceGain = 0.5 * (state.mul.science || 1) * resourceMult * scienceMultiplier;
-            state.resources.science += scienceGain;
-            state.stats.totalScience += scienceGain;
-            state.stats.totalResources += scienceGain;
+            scienceBonus = 1 + massRatio + (energyIntensity * 0.5);
             
-            // Higher energy collisions trigger more visual effects
+            // Higher energy collisions trigger more visual effects for different types
             if(Math.random() < (0.5 + energyIntensity * 0.3)) triggerCollisionEffect();
+          } else {
+            // Same ball types generate reduced science but still generate some
+            scienceBonus = 0.2 + (energyIntensity * 0.1);
           }
+          
+          const scienceGain = 0.5 * (state.mul.science || 1) * resourceMult * scienceBonus;
+          state.resources.science += scienceGain;
+          state.stats.totalScience += scienceGain;
+          state.stats.totalResources += scienceGain;
         }
       }
     }
     
-    // Check for balls that should die from decay (only after collisions)
+    // Check for balls that should die from decay - lowered threshold for more frequent deaths
     for(let i = state.balls.length - 1; i >= 0; i--) {
       const b = state.balls[i];
-      if(b.vitality <= 0.1) { // Minimum vitality threshold
+      if(b.vitality <= 0.05) { // Lowered threshold from 0.1 to 0.05 to match decay limits
         state.stats.ballsLost++;
         state.balls.splice(i, 1);
       }
     }
     
-    // Emergency ball spawning system - prevent complete extinction
+    // Emergency ball spawning system - less aggressive to allow natural decay periods
     if(state.balls.length === 0) {
       if(Milestones.survivor && Milestones.survivor.completed) {
         // Spawn emergency ball if survivor milestone is completed
         state.balls.push(createBall());
         console.log('Emergency ball spawned due to extinction!');
       } else {
-        // Spawn emergency ball but only if the player had balls before
-        if(state.stats.ballsSpawned > 1) {
+        // Only spawn emergency ball if player had many balls before (higher threshold)
+        // This allows for some natural extinction periods, making decay more meaningful
+        if(state.stats.ballsSpawned > 5) { // Raised from 1 to 5
           state.balls.push(createBall());
           console.log('Emergency ball spawned to prevent game over!');
         }
@@ -2483,22 +2527,77 @@
   const DebugSystem = {
     enabled: false,
     commands: {
-      help: () => console.log("Debug commands: addResource(type, amount), setPrestige(level), addBalls(count, type), unlockAll(), skipToEndgame(), testPhysics(), toggleDecay(), showState()"),
-      addResource: (type, amount) => { state.resources[type] = (state.resources[type] || 0) + amount; refresh(); },
-      setPrestige: (level) => { state.prestige.level = level; state.prestige.points = level * 10; updatePrestige(); refresh(); },
-      addBalls: (count = 10, type = 'basic') => { for(let i = 0; i < count; i++) state.balls.push(createBall(type)); },
+      help: () => console.log("Debug commands: addResource(type, amount), setPrestige(level), addBalls(count, type), unlockAll(), skipToEndgame(), testPhysics(), toggleDecay(), showState(), cosmicStart(), analyzeState(), showProgressReport()"),
+      addResource: (type, amount) => { 
+        state.resources[type] = (state.resources[type] || 0) + amount; 
+        console.log(`Added ${amount} ${type}. Total: ${state.resources[type]}`);
+        refresh(); 
+      },
+      setPrestige: (level) => { 
+        state.prestige.level = level; 
+        state.prestige.points = level * 10; 
+        state.prestige.unlocked = true;
+        console.log(`Set prestige to level ${level}`);
+        updatePrestige(); 
+        refresh(); 
+      },
+      addBalls: (count = 10, type = 'basic') => { 
+        for(let i = 0; i < count; i++) state.balls.push(createBall(type)); 
+        console.log(`Added ${count} ${type} balls. Total balls: ${state.balls.length}`);
+      },
       unlockAll: () => { 
-        state.ballTypes = ['basic', 'energy', 'quantum', 'antimatter'];
+        state.ballTypes = ['basic', 'energy', 'quantum', 'antimatter', 'cosmic', 'photon', 'darkMatter', 'void', 'graviton'];
         for(const r of Object.values(Research)) if(r.cost) { r.purchased = true; }
-        buildResearch(); refresh(); 
+        console.log('Unlocked all ball types and research');
+        buildResearch(); 
+        refresh(); 
+      },
+      cosmicStart: () => {
+        // Set up optimal cosmic start conditions
+        state.prestige.level = 5;
+        state.prestige.points = 50;
+        state.prestige.unlocked = true;
+        state.resources.antimatter = 30;
+        state.resources.cosmicEnergy = 75;
+        state.resources.quantum = 100;
+        state.resources.science = 2000;
+        state.resources.energy = 10000;
+        state.resources.pixels = 50000;
+        state.ballTypes.push('antimatter');
+        state.balls.push(createBall('antimatter'));
+        console.log('Set up optimal cosmic start - ready to purchase cosmic balls!');
+        refresh();
       },
       skipToEndgame: () => {
-        state.resources = {pixels:1e6, energy:1e6, science:1e5, quantum:1e3, antimatter:100};
+        state.resources = {
+          pixels:1e6, energy:1e6, science:1e5, quantum:1e3, antimatter:100,
+          cosmicEnergy:500, darkEnergy:100, voidEssence:10, spaceFabric:50, lightYears:20,
+          hydrogen:1000, helium:500, darkMatterFuel:10, photonEnergy:100, gravitonWaves:50
+        };
         state.stats = {totalPixels:1e7, totalEnergy:1e7, totalScience:1e6, ballsSpawned:1000, wallHits:10000, ballsLost:100};
-        state.prestige = {level:5, points:50, unlocked:true, unlocks:{}};
+        state.prestige = {level:10, points:100, unlocked:true, unlocks:{}};
         DebugSystem.commands.unlockAll();
-        DebugSystem.commands.addBalls(20, 'quantum');
-        DebugSystem.commands.addBalls(10, 'antimatter');
+        DebugSystem.commands.addBalls(5, 'cosmic');
+        DebugSystem.commands.addBalls(3, 'quantum');
+        DebugSystem.commands.addBalls(2, 'antimatter');
+        console.log('Skipped to end-game state with cosmic resources');
+      },
+      testCollisions: () => {
+        // Set up specific collision test scenario
+        state.balls = [];
+        state.balls.push({...createBall('basic'), x:200, y:200, vx:8, vy:0});
+        state.balls.push({...createBall('basic'), x:300, y:200, vx:-8, vy:0});
+        state.balls.push({...createBall('energy'), x:250, y:150, vx:0, vy:8});
+        console.log('Set up collision test scenario - 3 balls on collision course');
+      },
+      testDecay: () => {
+        // Add balls with low vitality for decay testing
+        for(let i = 0; i < 5; i++) {
+          const ball = createBall('basic');
+          ball.vitality = 0.1 + (Math.random() * 0.4); // 0.1 to 0.5 vitality
+          state.balls.push(ball);
+        }
+        console.log('Added 5 balls with low vitality for decay testing');
       },
       testPhysics: () => {
         // Add balls with different velocities to test collisions
@@ -2506,9 +2605,63 @@
         state.balls.push({...createBall('basic'), x:200, y:200, vx:5, vy:0});
         state.balls.push({...createBall('energy'), x:300, y:200, vx:-5, vy:0});
         state.balls.push({...createBall('quantum'), x:250, y:150, vx:0, vy:5});
+        console.log('Set up physics test with mixed ball types');
       },
-      toggleDecay: () => { state.decay.decayEnabled = !state.decay.decayEnabled; console.log('Decay:', state.decay.decayEnabled); },
+      toggleDecay: () => { 
+        state.decay.decayEnabled = !state.decay.decayEnabled; 
+        console.log('Decay system:', state.decay.decayEnabled ? 'ENABLED' : 'DISABLED'); 
+      },
       showState: () => console.log(JSON.stringify(state, null, 2)),
+      analyzeState: () => {
+        const analysis = {
+          progression: {
+            prestigeLevel: state.prestige.level,
+            ballTypes: state.ballTypes.length,
+            totalBalls: state.balls.length,
+            ballsSpawned: state.stats.ballsSpawned,
+            ballsLost: state.stats.ballsLost
+          },
+          resources: {
+            main: {pixels: state.resources.pixels || 0, energy: state.resources.energy || 0, science: state.resources.science || 0},
+            advanced: {quantum: state.resources.quantum || 0, antimatter: state.resources.antimatter || 0},
+            cosmic: {cosmicEnergy: state.resources.cosmicEnergy || 0, darkEnergy: state.resources.darkEnergy || 0}
+          },
+          nextGoals: []
+        };
+        
+        // Analyze next goals
+        if(!state.prestige.unlocked) analysis.nextGoals.push('Unlock prestige system');
+        if(state.prestige.level < 5) analysis.nextGoals.push('Reach prestige level 5 for cosmic access');
+        if(!state.ballTypes.includes('cosmic') && state.prestige.level >= 5) {
+          if((state.resources.antimatter || 0) < 15) analysis.nextGoals.push('Get 15 antimatter for cosmic balls');
+          if((state.resources.cosmicEnergy || 0) < 50) analysis.nextGoals.push('Get 50 cosmic energy for cosmic balls');
+        }
+        
+        console.log('=== GAME STATE ANALYSIS ===');
+        console.log(analysis);
+        return analysis;
+      },
+      showProgressReport: () => {
+        const report = {
+          ballStatus: state.balls.map(b => ({type: b.type, vitality: b.vitality.toFixed(3), age: b.age})),
+          milestoneProgress: Object.entries(Milestones).map(([key, m]) => {
+            const statValue = m.stat === 'level' ? state.prestige.level : (state.stats[m.stat] || 0);
+            return {name: m.name, progress: `${statValue}/${m.threshold}`, completed: m.completed};
+          }),
+          buildingCounts: Object.entries(Buildings).reduce((acc, [key, b]) => {
+            if(b.n > 0) acc[key] = b.n;
+            return acc;
+          }, {}),
+          unlocks: {
+            ballTypes: state.ballTypes,
+            researchPurchased: Object.entries(Research).filter(([k, r]) => r.purchased).map(([k, r]) => r.name)
+          }
+        };
+        
+        console.log('=== PROGRESS REPORT ===');
+        console.log(report);
+        return report;
+      },
       genesisReset: () => DebugSystem.performGenesisReset()
     },
     
